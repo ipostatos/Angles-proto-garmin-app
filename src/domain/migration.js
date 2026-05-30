@@ -39,6 +39,14 @@ export const LS_VERSION = 1;
 
 export const DEFAULT_HOLDS = ['Anton'];
 
+export const DEFAULT_ANGLES = [
+    { id: cryptoRandomId(), hold: 'Austin', value: 40, saw: 'main' },
+    { id: cryptoRandomId(), hold: 'Avalon Flat', value: 40, saw: 'main' },
+    { id: cryptoRandomId(), hold: 'Austin', value: 40, saw: 'main' },
+    { id: cryptoRandomId(), hold: 'Avalon SuperFlat', value: 40, saw: 'stefan' },
+    { id: cryptoRandomId(), hold: 'Amon', value: 40, saw: 'stefan' },
+];
+
 function clamp(n, a, b) {
     return Math.max(a, Math.min(b, n));
 }
