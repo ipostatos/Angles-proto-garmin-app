@@ -21,8 +21,9 @@ import { clearFailures, isRateLimited, rateLimitKey, recordFailure } from '../_l
 
 export const MIN_PASSWORD_LENGTH = 10;
 export const MIN_SETUP_TOKEN_LENGTH = 24;
-// All wrong workshop codes together, from any address: a slow brute force
-// spread over many networks still stops (existing devices keep working).
+// All wrong workshop codes together, from any address. Over this cap only
+// networks that already guessed wrong are stopped, so a flood cannot lock
+// out a new operator device that enters the right code first time.
 export const GLOBAL_UNLOCK_FAILURES = 100;
 const BODY_LIMIT = 16 * 1024;
 
@@ -107,7 +108,8 @@ async function unlock(req, res, deps) {
     const key = rateLimitKey(getClientIp(req), 'workshop-code');
     const globalKey = 'global:workshop-code';
     if (await isRateLimited(deps.rate, key, deps.now)
-        || await isRateLimited(deps.rate, globalKey, deps.now, { maxFailures: GLOBAL_UNLOCK_FAILURES })) {
+        || (await isRateLimited(deps.rate, globalKey, deps.now, { maxFailures: GLOBAL_UNLOCK_FAILURES })
+            && await isRateLimited(deps.rate, key, deps.now, { maxFailures: 1 }))) {
         res.status(429).json({ error: 'too_many_attempts', message: 'Too many wrong codes. Try again later.' });
         return;
     }

@@ -27,7 +27,7 @@
 | D17 | First-run takeover of a fresh deploy | SEV-HIGH | S | Auth | **DONE (v2.0)** — single-statement "insert only if no users" + `SETUP_TOKEN` required on Vercel, throttled |
 | D18 | Admin sessions survive a password change | SEV-MEDIUM | M | Auth | **DONE (v2.0)** — sessions carry a fingerprint of the password hash, checked against the database on every admin request |
 | D19 | Shared workshop code instead of per-operator identity | SEV-LOW | M | Auth | ACCEPTED — read-only + send-to-station rights; rotate on staff change (signs every device out) |
-| D20 | Pairing code is 6 digits | SEV-LOW | S | Auth | ACCEPTED — approve is admin-only and throttled per admin + network; waiting codes are unique; pairing requests and unknown tokens throttled per network; max 50 waiting, oldest evicted; 15 min TTL |
+| D20 | Pairing code is 6 digits | SEV-LOW | S | Auth | ACCEPTED — approve is admin-only and throttled per admin + network; codes only while an admin has pairing open (10 min); waiting codes are unique; pairing requests and unknown tokens throttled per network; max 50 waiting; 15 min TTL |
 | D21 | Per-IP throttles bypassed by IPv6 rotation | SEV-MEDIUM | S | Anti-abuse | **DONE (v2.0)** — IPv6 keyed by /64; global cap on wrong workshop codes; codes 8+ chars, `SETUP_TOKEN` 24+ chars |
 | D22 | Images cached on a device after its access is revoked | SEV-LOW | S | Data exposure | ACCEPTED — `Cache-Control: private, max-age=86400` (at most a day) |
 | R1 | DB dumps in git history | SEV-HIGH (was) | — | Data exposure | **RESOLVED** (monitor residual public clones/caches) |

@@ -145,7 +145,7 @@ describe('/api/account/unlock', () => {
         expect(verifyAccess(cookieValue(res.headers['Set-Cookie'], ACCESS_COOKIE), 3, { secret: SECRET })).toBe(true);
     });
 
-    it('stops all guesses after the global failure limit, from any address', async () => {
+    it('over the global failure cap only networks that guessed wrong are stopped', async () => {
         const { hash, salt } = hashPassword('saw-2026');
         const settings = memorySettings({ code: { hash, salt, version: 1 } });
         const rate = memoryRate();
@@ -155,7 +155,10 @@ describe('/api/account/unlock', () => {
             return res;
         };
         for (let i = 0; i < 100; i++) await unlock(`10.0.${i >> 8}.${i & 255}`, `nope-${i}`);
-        expect((await unlock('192.0.2.1', 'saw-2026')).statusCode).toBe(429);
+        // a network that already guessed wrong is stopped …
+        expect((await unlock('10.0.0.5', 'saw-2026')).statusCode).toBe(429);
+        // … a new device on a clean network still gets in with the right code
+        expect((await unlock('192.0.2.1', 'saw-2026')).statusCode).toBe(200);
     }, 30000); // 100 scrypt checks
 
     it('rejects a wrong code and throttles repeated guesses', async () => {

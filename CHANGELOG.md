@@ -22,13 +22,14 @@ follows [Semantic Versioning](https://semver.org/).
 - **Watch pairing.** The server issues each watch a random token together with
   a 6-digit code (15 min) and stores only the token's SHA-256; an admin enters
   the code to pair the watch to a station, and can move or unpair it later.
-  Pairing requests, unknown tokens and wrong codes are throttled; a flood of
-  requests evicts the oldest waiting ones instead of blocking pairing.
+  Codes are handed out only while an admin has pairing open (10 minutes);
+  pairing requests, unknown tokens and wrong codes are throttled.
 - **Sessions follow the password.** Admin sessions carry a fingerprint of the
   password hash: changing the password signs out every other device. Changing
   the workshop code asks for the admin's password.
 - **Throttling by network:** IPv6 addresses are limited per /64, and all wrong
-  workshop codes together are capped (100 per 15 minutes). Workshop codes are
+  workshop codes together are capped (100 per 15 minutes; over the cap only
+  networks that already guessed wrong are stopped). Workshop codes are
   8+ characters; `SETUP_TOKEN` must be 24+ characters and is also required with
   `NODE_ENV=production` outside Vercel.
 - **Garmin app 1.2:** PAIR WATCH screen with the code and automatic polling,

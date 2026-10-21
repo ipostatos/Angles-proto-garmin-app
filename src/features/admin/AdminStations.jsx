@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { approveWatch, createStation, deleteStation, listStations, moveWatch } from "../../storage/watch.js";
+import { approveWatch, createStation, deleteStation, listStationsAdmin, moveWatch, openPairing } from "../../storage/watch.js";
 import { theme } from "../../styles/theme.js";
 
 const inputStyle = {
@@ -23,13 +23,24 @@ function ago(seconds) {
  */
 export function AdminStations({ styles }) {
     const [stations, setStations] = useState(null);
+    const [openUntil, setOpenUntil] = useState(0);
+    const [, tick] = useState(0);
     const [name, setName] = useState("");
     const [pair, setPair] = useState({ code: "", station: "", label: "" });
 
     const refresh = useCallback(() => {
-        listStations().then(setStations).catch(() => toast.error("Could not load the stations."));
+        listStationsAdmin()
+            .then((r) => { setStations(r.stations ?? []); setOpenUntil(r.pairingOpenUntil ?? 0); })
+            .catch(() => toast.error("Could not load the stations."));
     }, []);
     useEffect(() => { refresh(); }, [refresh]);
+    // countdown for the pairing window
+    const open = openUntil > Date.now();
+    useEffect(() => {
+        if (!open) return undefined;
+        const t = setInterval(() => tick((n) => n + 1), 1000);
+        return () => clearInterval(t);
+    }, [open]);
 
     const act = async (fn, ok) => {
         try {
@@ -108,8 +119,18 @@ export function AdminStations({ styles }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 8, borderTop: `1px solid ${theme.colors.borderLight}` }}>
                     <div style={{ fontSize: 12, fontWeight: 700 }}>Pair a watch</div>
                     <div style={{ fontSize: 12, color: theme.colors.textMuted, lineHeight: 1.5 }}>
-                        On the watch open Angles → PAIR WATCH. Enter the 6-digit code it shows (valid 15 minutes).
+                        1. Open pairing here (10 minutes). 2. On the watch: Angles → FROM PHONE; it shows a 6-digit code.
+                        3. Enter the code below and pick the station.
                     </div>
+                    <button
+                        type="button"
+                        style={styles.btnGhost}
+                        onClick={() => act(async () => { const r = await openPairing(); setOpenUntil(r.until); }, "Pairing is open for 10 minutes")}
+                    >
+                        {open
+                            ? `PAIRING OPEN · ${Math.floor((openUntil - Date.now()) / 60000)}:${String(Math.floor(((openUntil - Date.now()) % 60000) / 1000)).padStart(2, "0")}`
+                            : "OPEN PAIRING (10 MIN)"}
+                    </button>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <input style={{ ...inputStyle, width: 110, letterSpacing: "0.2em" }} inputMode="numeric" placeholder="123456" maxLength={7}
                             value={pair.code} onChange={(e) => setPair({ ...pair, code: e.target.value })} aria-label="Code from the watch" />

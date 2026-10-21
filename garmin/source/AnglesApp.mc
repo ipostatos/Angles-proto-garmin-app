@@ -88,7 +88,15 @@ class PairHandler {
             syncFromPhone();
         }
         if (gPairView != null) {
-            gPairView.update(code == 200 ? null : (code == 429 ? "too many tries, wait" : "no phone / offline"));
+            var err = null;
+            if (code == 403) {
+                err = "admin: open pairing";
+            } else if (code == 429) {
+                err = "too many tries, wait";
+            } else if (code != 200) {
+                err = "no phone / offline";
+            }
+            gPairView.update(err);
         }
         showSyncStatus(syncStatus());
     }

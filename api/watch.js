@@ -12,6 +12,7 @@
 //
 // Admin only:
 //   POST /api/watch?a=station  { name } create · { id, delete: true } delete
+//   POST /api/watch?a=open     opens pairing for 10 minutes (watches can ask for codes only then)
 //   POST /api/watch?a=approve  { code, station, label } pair the watch that shows `code`
 //   POST /api/watch?a=move     { watch, station } move a watch · { watch, station: null } unpair
 //
@@ -31,6 +32,7 @@ export const MAX_SENT_HOLDS = 200;
 export const PAIR_TTL_MS = 15 * 60 * 1000;
 export const MAX_PENDING_PAIRS = 50;
 export const MAX_UNKNOWN_TOKENS = 30; // per network per 15 min
+export const PAIRING_WINDOW_MS = 10 * 60 * 1000;
 const MAX_NAME = 40;
 
 export function toWatchCatalog(data) {
@@ -94,6 +96,12 @@ async function watchRead(req, res, d) {
 }
 
 async function watchPair(req, res, d) {
+    // Codes are handed out only while an admin has pairing open, so a flood
+    // outside that window does nothing and inside it lasts minutes at most.
+    if ((await d.stations.pairingOpenUntil()) <= d.now) {
+        res.status(403).json({ e: 'closed' });
+        return;
+    }
     // Every pairing request counts against the network, so the table cannot be flooded.
     const key = rateLimitKey(getClientIp(req), 'watch-pair');
     if (await isRateLimited(d.rate, key, d.now, { maxFailures: 10 })) {
@@ -138,6 +146,7 @@ async function webAction(req, res, d, action) {
                 id: s.id, name: s.name, sentAt: s.sentAt, count: s.holds.length,
                 ...(admin ? { watches: s.watches } : {}),
             })),
+            ...(admin ? { pairingOpenUntil: await d.stations.pairingOpenUntil() } : {}),
         });
         return;
     }
@@ -184,6 +193,11 @@ async function webAction(req, res, d, action) {
         }
         const created = await d.stations.createStation(name);
         res.status(created ? 200 : 409).json(created ?? { error: 'exists', message: 'A station with this name already exists.' });
+        return;
+    }
+    if (action === 'open') {
+        const until = await d.stations.openPairing(PAIRING_WINDOW_MS);
+        res.status(200).json({ ok: true, until });
         return;
     }
     if (action === 'approve') {

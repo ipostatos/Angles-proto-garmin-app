@@ -67,6 +67,6 @@ watch.
 
 1. Give them the workshop code; they open the site once on their phone.
 2. Decide the station (their saw or their name). Add it if needed.
-3. Install Angles on their watch and pair it to that station
-   ([`WATCH_SETUP.md`](WATCH_SETUP.md)).
+3. Install Angles on their watch, open pairing in SETTINGS and pair the watch
+   to that station ([`WATCH_SETUP.md`](WATCH_SETUP.md)).
 4. Show them ⌚ → their station, then FROM PHONE on the watch.

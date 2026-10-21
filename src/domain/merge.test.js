@@ -102,9 +102,34 @@ describe('mergeCatalogs', () => {
         const theirs = clone(base);
         theirs.holds.push({ id: 't9', name: 'base 10' });
         const r = mergeCatalogs(base, mine, theirs);
-        expect(r.conflicts).toEqual([{ kind: 'hold', id: 'm9', label: 'Base 10 (also added by the other admin)' }]);
+        expect(r.conflicts).toEqual([{ kind: 'hold', id: 'm9', label: 'Base 10 (same name as another hold)' }]);
         expect(r.mine.holds.map((h) => h.name)).toEqual(['Amon', 'Anton', 'base 10', 'Base 10 (2)']);
         expect(r.theirs.holds.map((h) => h.id)).toEqual(['h1', 'h2', 't9']);
         expect(r.theirs.angles.some((a) => a.id === 'ma')).toBe(false);
+    });
+
+    it('when I deleted the hold, their new angle on it is a conflict the other way round', () => {
+        const mine = clone(base);
+        mine.holds = mine.holds.filter((h) => h.id !== 'h2');
+        mine.angles = mine.angles.filter((a) => a.holdId !== 'h2');
+        const theirs = clone(base);
+        theirs.angles.push({ id: 't1', holdId: 'h2', value: 44, saw: 'stefan' });
+        const r = mergeCatalogs(base, mine, theirs);
+        expect(r.conflicts).toEqual([{ kind: 'angle', id: 't1', label: 'Anton STEFAN 44° (hold you deleted)' }]);
+        expect(r.mine.holds.map((h) => h.id)).toEqual(['h1']);            // my delete wins
+        expect(r.mine.angles.map((a) => a.id)).toEqual(['a1']);
+        expect(r.theirs.holds.map((h) => h.id).sort()).toEqual(['h1', 'h2']); // their angle survives
+        expect(r.theirs.angles.map((a) => a.id).sort()).toEqual(['a1', 't1']); // my delete of a2 is not in conflict
+    });
+
+    it('a rename that collides with their new hold is a conflict', () => {
+        const mine = clone(base);
+        mine.holds[1].name = 'Base 10';
+        const theirs = clone(base);
+        theirs.holds.push({ id: 't9', name: 'Base 10' });
+        const r = mergeCatalogs(base, mine, theirs);
+        expect(r.conflicts).toEqual([{ kind: 'hold', id: 'h2', label: 'Base 10 (same name as another hold)' }]);
+        expect(r.mine.holds.find((h) => h.id === 'h2').name).toBe('Base 10 (2)');
+        expect(r.theirs.holds.find((h) => h.id === 'h2').name).toBe('Anton');
     });
 });

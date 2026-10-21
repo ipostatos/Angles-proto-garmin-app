@@ -35,6 +35,12 @@ export function sendHoldsToStation(stationId, holdNames) {
 export const createStation = (name) => call('station', { body: { name } });
 export const deleteStation = (id) => call('station', { body: { id, delete: true } });
 export const approveWatch = (code, stationId, label) => call('approve', { body: { code, station: stationId, label } });
+export const openPairing = () => call('open');
+
+/** Admin view: { stations, pairingOpenUntil } */
+export async function listStationsAdmin() {
+    return call('stations', { method: 'GET' });
+}
 export const moveWatch = (watchId, stationId) => call('move', { body: { watch: watchId, station: stationId } });
 
 export function loadLastStation() {

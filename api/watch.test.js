@@ -30,9 +30,11 @@ const stateStore = { readState: async () => ({ data, revision: 7 }), initState: 
 const settingsStore = { async getWorkshopCode() { return { hash: 'h', salt: 's', version: 1 }; } };
 
 function memoryStations() {
-    const st = { stations: [], devices: new Map(), nextId: 1 };
+    const st = { stations: [], devices: new Map(), nextId: 1, openUntil: NOW + 60_000 };
     return {
         st,
+        async openPairing(ms) { st.openUntil = NOW + ms; return st.openUntil; },
+        async pairingOpenUntil() { return st.openUntil; },
         async listStations() {
             return st.stations.map((s) => ({
                 ...s,
@@ -183,6 +185,14 @@ describe('pairing flow', () => {
         expect(read.statusCode).toBe(200);
         expect(read.body).toMatchObject({ r: 7, s: ['Amon'], t: 555, n: 'Saw 1' });
         expect(read.body.h[0][0]).toBe('Amon');
+    });
+
+    it('hands out codes only while an admin has pairing open', async () => {
+        stations.st.openUntil = 0;
+        expect((await call({ method: 'POST', a: 'pair' })).body).toEqual({ e: 'closed' });
+        expect((await call({ method: 'POST', a: 'open', headers: { cookie: workshop() }, body: {} })).statusCode).toBe(403);
+        expect((await call({ method: 'POST', a: 'open', headers: { cookie: admin() }, body: {} })).statusCode).toBe(200);
+        expect((await call({ method: 'POST', a: 'pair' })).body.c).toMatch(/^\d{6}$/);
     });
 
     it('a waiting watch asking again keeps its token and gets a new code', async () => {

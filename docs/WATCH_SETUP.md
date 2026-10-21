@@ -50,28 +50,33 @@ kept.
 
 ## 2. Pair the watch to a station
 
-On the watch:
-
-1. Open **Angles**. On a new watch the item **FROM PHONE** says
-   `not paired: press to pair`.
-2. Select **FROM PHONE**. The **PAIR WATCH** screen opens and shows a
-   **6-digit code** (it needs the phone connected to get one).
-
 On the website, as admin:
 
-3. **ADMIN → SETTINGS → Stations and watches.** If there is no station yet,
+1. **ADMIN → SETTINGS → Stations and watches.** If there is no station yet,
    add one (for example `Saw 1` or the operator's name).
-4. Under **Pair a watch** enter the code from the watch, pick the station,
-   optionally give the watch a name (`Instinct Tomek`), press **PAIR**.
+2. Under **Pair a watch** press **OPEN PAIRING (10 MIN)**. Watches can ask for
+   a code only while this window is open.
+
+On the watch:
+
+3. Open **Angles**. On a new watch the item **FROM PHONE** says
+   `not paired: press to pair`.
+4. Select **FROM PHONE**. The **PAIR WATCH** screen opens and shows a
+   **6-digit code** (it needs the phone connected to get one).
+
+Back on the website:
+
+5. Enter the code from the watch, pick the station, optionally give the watch
+   a name (`Instinct Tomek`), press **PAIR**.
 
 Back on the watch:
 
-5. Within a few seconds the watch shows **PAIRED** and the station name, gives
+6. Within a few seconds the watch shows **PAIRED** and the station name, gives
    a short buzz and returns to the holds screen. **FROM PHONE** now shows the
    station name.
 
 The code is valid for 15 minutes. If it expired, press START on the PAIR WATCH
-screen to get a new one.
+screen to get a new one (pairing must be open).
 
 ## 3. Daily use
 
@@ -99,6 +104,7 @@ screen to get a new one.
 | `no phone / offline` | The request did not reach the server. | Phone near the watch, Bluetooth on, Garmin Connect running, phone online. Try FROM PHONE again. |
 | `not paired: press to pair` | The server does not know this watch (new, or unpaired by an admin). | Pair it (section 2). |
 | `pair code 123456` | Waiting for an admin to enter the code. | Admin: SETTINGS → Pair a watch. |
+| `admin: open pairing` | Pairing is closed on the server. | Admin: SETTINGS → OPEN PAIRING, then START on the watch. |
 | `too many tries, wait` | Too many pairing requests from this network. | Wait 15 minutes. |
 | Old holds after sending a new job | The watch has not synced yet. | Press FROM PHONE. |
 | Holds list empty | Fresh install, never synced. | Pair, then FROM PHONE. |
@@ -112,6 +118,7 @@ wrong, expired, or the watch was already paired.
 - The token is made by the server with a cryptographic random generator, is
   never shown, and the server keeps only its hash. Unpairing deletes it on the
   server and the watch forgets it on its next sync.
-- Pairing requests and unknown tokens are limited per network, waiting codes
+- Codes are handed out only while an admin has pairing open (10 minutes).
+  Pairing requests and unknown tokens are limited per network, waiting codes
   are unique, and wrong codes on the admin side are throttled, so neither codes
   nor tokens can be guessed in bulk.

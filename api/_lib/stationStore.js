@@ -29,7 +29,9 @@ async function ensure(sql) {
             last_seen    TIMESTAMPTZ
         )
     `;
-    // a live pairing code belongs to exactly one waiting watch
+    // a live pairing code belongs to exactly one waiting watch (expired ones go first,
+    // so old duplicates can never block the index)
+    await sql`DELETE FROM watch_devices WHERE station_id IS NULL AND (pair_expires IS NULL OR pair_expires < now())`;
     await sql`
         CREATE UNIQUE INDEX IF NOT EXISTS watch_devices_pending_code_idx
             ON watch_devices (pair_code) WHERE station_id IS NULL
@@ -166,6 +168,26 @@ export const neonStationStore = {
             RETURNING station_id
         `;
         return { alreadyPaired: rows[0]?.station_id != null };
+    },
+
+    /** Admin opens pairing for `ms`; watches can ask for a code only while it is open. */
+    async openPairing(ms) {
+        const sql = getSql();
+        await ensure(sql);
+        const until = new Date(Date.now() + ms).toISOString();
+        await sql`
+            INSERT INTO settings (key, value) VALUES ('pairing_open_until', to_jsonb(${until}::text))
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+        `;
+        return Date.parse(until);
+    },
+
+    /** Epoch ms until which pairing is open (0 when closed). */
+    async pairingOpenUntil() {
+        const sql = getSql();
+        await ensure(sql);
+        const rows = await sql`SELECT value #>> '{}' AS until FROM settings WHERE key = 'pairing_open_until'`;
+        return rows[0] ? Date.parse(rows[0].until) || 0 : 0;
     },
 
     /** Approve the pending watch that shows `code`; returns false when no such code is live. */

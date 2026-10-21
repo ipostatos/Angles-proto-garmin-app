@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS stations (
 
 CREATE TABLE IF NOT EXISTS watch_devices (
   token_hash   TEXT PRIMARY KEY,
-  station_id   INT REFERENCES stations(id) ON DELETE SET NULL,
+  station_id   INT REFERENCES stations(id) ON DELETE CASCADE,
   label        TEXT,
   pair_code    TEXT,
   pair_expires TIMESTAMPTZ,
@@ -78,4 +78,5 @@ CREATE TABLE IF NOT EXISTS watch_devices (
   last_seen    TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS watch_devices_pair_code_idx ON watch_devices (pair_code);
+CREATE UNIQUE INDEX IF NOT EXISTS watch_devices_pending_code_idx
+  ON watch_devices (pair_code) WHERE station_id IS NULL;

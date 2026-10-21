@@ -85,36 +85,60 @@ export function mergeCatalogs(base, mine, theirs) {
     ];
     const conflictIds = new Set(conflicts.map((c) => c.id));
 
-    // My new or edited angle on a hold the other admin deleted: never drop it
-    // silently. "Mine" brings the hold back, "theirs" lets it go.
+    const B = byId(base?.holds);
+    const M = byId(mine?.holds);
+    const T = byId(theirs?.holds);
     const baseAngles = byId(base?.angles);
-    const baseHolds = byId(base?.holds);
-    const myHolds = byId(mine?.holds);
-    const mineHoldIds = new Set(holds.mine.map((h) => h.id));
-    for (const a of angles.mine) {
-        if (mineHoldIds.has(a.holdId) || conflictIds.has(a.id)) continue;
-        if (same(a, baseAngles.get(a.id))) continue;
-        conflicts.push({ kind: 'angle', id: a.id, label: `${angleLabel(a)} (hold deleted by the other admin)` });
-        conflictIds.add(a.id);
-        const hold = myHolds.get(a.holdId) ?? baseHolds.get(a.holdId);
-        if (hold && !mineHoldIds.has(hold.id)) {
-            holds.mine.push(hold);
-            mineHoldIds.add(hold.id);
+    const mineAngles = byId(mine?.angles);
+    const theirAngles = byId(theirs?.angles);
+    const ensureHold = (list, hold) => (hold && !list.some((h) => h.id === hold.id) ? [...list, hold] : list);
+
+    // A hold deleted on one side while the other side added or changed one of
+    // its angles: never drop that work silently. The side that deleted the
+    // hold wins in its own variant; the other variant brings the hold back.
+    for (const [holdId, baseHold] of B) {
+        if (conflictIds.has(holdId)) continue;
+        const iDeleted = !M.has(holdId) && T.has(holdId);
+        const theyDeleted = M.has(holdId) && !T.has(holdId);
+        if (!iDeleted && !theyDeleted) continue;
+        const keeper = iDeleted ? theirAngles : mineAngles;
+        const work = [...keeper.values()].filter((a) => a.holdId === holdId && !same(a, baseAngles.get(a.id)));
+        if (work.length === 0) continue;
+        for (const a of work) {
+            const label = `${angleLabel(a)} (${iDeleted ? 'hold you deleted' : 'hold deleted by the other admin'})`;
+            conflicts.push({ kind: 'angle', id: a.id, label });
+            conflictIds.add(a.id);
         }
+        if (theyDeleted) holds.mine = ensureHold(holds.mine, M.get(holdId) ?? baseHold);
+        else holds.theirs = ensureHold(holds.theirs, T.get(holdId) ?? baseHold);
     }
 
-    // Both admins created a hold with the same name.
-    const theirNames = new Map((theirs?.holds || []).map((h) => [normName(h.name), h.id]));
+    // Two holds ending up with the same name: the one this editor created or
+    // renamed is the conflict. "Mine" keeps it as "Name (2)", "theirs" undoes it.
+    const groups = new Map();
+    for (const h of holds.mine) {
+        const k = normName(h.name);
+        groups.set(k, [...(groups.get(k) || []), h]);
+    }
     const dropFromTheirs = new Set();
-    for (const h of mine?.holds || []) {
-        const other = theirNames.get(normName(h.name));
-        if (baseHolds.has(h.id) || other == null || other === h.id) continue;
-        conflicts.push({ kind: 'hold', id: h.id, label: `${h.name} (also added by the other admin)` });
+    for (const group of groups.values()) {
+        if (group.length < 2) continue;
         const taken = new Set(holds.mine.map((x) => normName(x.name)));
-        let n = 2;
-        while (taken.has(normName(`${h.name} (${n})`))) n++;
-        holds.mine = holds.mine.map((x) => (x.id === h.id ? { ...x, name: `${h.name} (${n})` } : x));
-        dropFromTheirs.add(h.id);
+        for (const h of group) {
+            const mineHold = M.get(h.id);
+            const changedByMe = mineHold && (!B.has(h.id) || normName(B.get(h.id).name) !== normName(mineHold.name));
+            if (!changedByMe) continue;
+            conflicts.push({ kind: 'hold', id: h.id, label: `${mineHold.name} (same name as another hold)` });
+            let n = 2;
+            while (taken.has(normName(`${mineHold.name} (${n})`))) n++;
+            taken.add(normName(`${mineHold.name} (${n})`));
+            holds.mine = holds.mine.map((x) => (x.id === h.id ? { ...x, name: `${mineHold.name} (${n})` } : x));
+            if (!B.has(h.id)) dropFromTheirs.add(h.id);
+            else {
+                const theirsName = (T.get(h.id) ?? B.get(h.id)).name;
+                holds.theirs = holds.theirs.map((x) => (x.id === h.id ? { ...x, name: theirsName } : x));
+            }
+        }
     }
     const theirsHolds = holds.theirs.filter((h) => !dropFromTheirs.has(h.id));
 

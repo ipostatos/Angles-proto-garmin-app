@@ -25,8 +25,9 @@ is already on the screen.
 
 ## How it works at the saw
 
-0. **Pair once.** FROM PHONE → the watch shows a 6-digit code → an admin enters
-   it in SETTINGS and picks the station (saw or operator). Step by step:
+0. **Pair once.** Admin opens pairing in SETTINGS → FROM PHONE on the watch
+   shows a 6-digit code → the admin enters it and picks the station (saw or
+   operator). Step by step:
    [`../docs/WATCH_SETUP.md`](../docs/WATCH_SETUP.md).
 1. **Pick the job.** Select holds on the website, press **⌚** and choose the
    station, or tick holds on the watch itself.
@@ -112,7 +113,7 @@ operators: [`../docs/MULTI_OPERATOR.md`](../docs/MULTI_OPERATOR.md).
 | `GET /api/watch` (paired) | `200 { "r": 7, "h": [["Amon", [24.7, 39.8], [32, 39.8]], ...], "s": ["Amon"], "t": 1790939847, "n": "Saw 1" }` |
 | `GET /api/watch` (unknown token) | `401 { "e": "unpaired" }` |
 | `GET /api/watch` (waiting) | `403 { "e": "pending", "c": "123456" }` |
-| `POST /api/watch?a=pair` | `200 { "c": "123456", "k": "<token>" }` (code valid 15 min; a waiting watch gets only a new `c`) |
+| `POST /api/watch?a=pair` | `200 { "c": "123456", "k": "<token>" }` (code valid 15 min; a waiting watch gets only a new `c`); `403 { "e": "closed" }` when no admin has pairing open |
 
 `h` — catalog rows `[name, [main], [stefan]]` (no images, ~3.5 KB);
 `s` — hold names of this station's job; `t` — send time in unix **seconds**
