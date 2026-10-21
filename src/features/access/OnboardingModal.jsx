@@ -18,7 +18,7 @@ export function OnboardingModal({ onClose }) {
             aria-labelledby="onboarding-title"
             onClick={onClose}
             style={{
-                position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.32)",
+                position: "fixed", inset: 0, fontFamily: theme.fonts.sans, color: theme.colors.textPrimary, zIndex: 10000, background: "rgba(0,0,0,0.32)",
                 display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
             }}
         >

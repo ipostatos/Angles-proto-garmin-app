@@ -10,7 +10,7 @@ export function MergeConflictDialog({ conflicts, styles, onKeepMine, onKeepTheir
     const shown = conflicts.slice(0, 8);
     return (
         <div role="dialog" aria-modal="true" aria-labelledby="merge-title"
-            style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            style={{ position: "fixed", inset: 0, fontFamily: theme.fonts.sans, color: theme.colors.textPrimary, zIndex: 300, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
             <div style={{ background: theme.colors.cardBg, borderRadius: 10, padding: 24, maxWidth: 360, width: "100%", display: "flex", flexDirection: "column", gap: 12, boxSizing: "border-box" }}>
                 <div id="merge-title" style={{ fontSize: 15, fontWeight: 700 }}>Changed by someone else too</div>
                 <div style={{ fontSize: 13, color: theme.colors.textSecondary, lineHeight: 1.5 }}>

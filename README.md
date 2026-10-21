@@ -1,309 +1,275 @@
-# Angles-proto + Garmin app
-
-> Saw-angle reference tool for the AVA Volumes workshop: a shared web catalog of cut angles for climbing holds and volumes, a phone work mode, printable sheets, and a **Garmin watch app** that shows the next angle on the operator's wrist.
-
-[![Version](https://img.shields.io/badge/web-v2.0-brightgreen?style=flat-square)](CHANGELOG.md)
-[![Garmin app](https://img.shields.io/badge/Garmin%20app-v1.2-007CC3?style=flat-square&logo=garmin&logoColor=white)](garmin/README.md)
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-avacut.vercel.app-black?style=flat-square&logo=vercel)](https://avacut.vercel.app)
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
-[![Monkey C](https://img.shields.io/badge/Connect%20IQ-Monkey%20C-111?style=flat-square)](garmin/)
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-000?style=flat-square&logo=vercel)](https://vercel.com)
-[![License](https://img.shields.io/badge/license-proprietary-lightgrey?style=flat-square)](#license)
-
-**Current versions: web v2.0, Garmin app v1.2** — see the [changelog](CHANGELOG.md) and [release notes](docs/RELEASE_NOTES.md).
+<p align="center">
+  <img src="docs/assets/hero.svg" width="100%" alt="Angles: a saw blade, the app name and four watch screens — open angle, cut (green), next angle, missed (red)">
+</p>
 
 <p align="center">
-  <img src="garmin/docs/screenshots/flow-big-mode.png" width="820" alt="Garmin app BIG MODE: open angle, cut (green), automatic jump, missed angle (red)">
+  <b>Saw-angle reference for a plywood workshop.</b><br>
+  A shared web catalog of cut angles, a phone work mode, printable sheets,<br>
+  and a Garmin watch app that puts the next angle on the operator's wrist.
+</p>
+
+<p align="center">
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/web-v2.0-16a34a?style=flat-square" alt="web v2.0"></a>
+  <a href="garmin/README.md"><img src="https://img.shields.io/badge/Garmin%20app-v1.2-007CC3?style=flat-square&logo=garmin&logoColor=white" alt="Garmin app v1.2"></a>
+  <img src="https://img.shields.io/badge/Connect%20IQ-Monkey%20C-111?style=flat-square" alt="Connect IQ, Monkey C">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19">
+  <img src="https://img.shields.io/badge/Vercel-Functions%20%2B%20Blob-000?style=flat-square&logo=vercel" alt="Vercel Functions and Blob">
+  <img src="https://img.shields.io/badge/Neon-Postgres-00E599?style=flat-square&logo=postgresql&logoColor=white" alt="Neon Postgres">
+  <img src="https://img.shields.io/badge/tests-246%20passing-16a34a?style=flat-square" alt="246 tests passing">
+</p>
+
+<p align="center">
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="docs/CUTTING.md">Cutting above 45°</a> ·
+  <a href="docs/WATCH_SETUP.md">Watch setup</a> ·
+  <a href="docs/MULTI_OPERATOR.md">Several operators</a> ·
+  <a href="#quick-start">Quick start</a>
 </p>
 
 ---
 
+<p align="center">
+  <img src="docs/assets/demo.gif" width="760" alt="Walkthrough: open the catalog with the workshop code, pick holds, send them to a station, pair the watch, then cut: the angle turns green, the watch jumps to the next one, a skipped angle turns red">
+  <br><sub>30-second walkthrough on demo data. Static version: the screenshots below.</sub>
+</p>
+
 ## Why it exists
 
-AVA Volumes builds climbing holds and volumes from plywood panels. The panel
-edges are cut at bevel angles, a single hold needs many of them, and a job is
-usually several holds at once. Angles replaces printed lists and memory with:
+Built at **AVA Volumes**, where climbing holds and volumes are made from
+plywood panels. Every panel edge is cut at a bevel angle; one hold needs many of
+them and a job is usually several holds at once. Angles replaces printed lists
+and memory with:
 
-1. **One shared catalog** of every hold and its angles, edited by named admins
-   with a change history.
-2. **One merged, sorted cut list** for the holds of the current job, split by
-   saw set-up (**MAIN** and **STEFAN**).
-3. **Tick-off progress** at the saw: on a phone (work mode) or on a Garmin
-   watch, where one button press marks the cut and jumps to the next angle.
+- **one shared catalog** of holds and angles, edited by named admins with a change history;
+- **one merged, sorted cut list** per saw set-up — **MAIN** (panel flat, up to 45°) and **STEFAN** (panel clamped upright, for edges above 45°, see [`docs/CUTTING.md`](docs/CUTTING.md));
+- **tick-off progress at the saw** — on a phone, or on a Garmin watch where one button press marks the cut and jumps to the next angle.
 
-The app is used daily on the workshop floor.
+The web app is used daily on the workshop floor.
 
-## What It Does
+## How it works
 
-Operators select one or more holds, see their angles for **MAIN** (normal
-clamping beam, panel flat, up to 45°) and **STEFAN** (clamping beam that holds
-the blank vertically, for edges steeper than 45°), open the cutting drawing for
-a row, use a phone-friendly work mode, print A4 reference sheets, or send the
-selection to the watch.
+<p align="center">
+  <img src="docs/assets/how-it-works.svg" width="100%" alt="Catalog (admins) → station job (one per saw or operator) → phone (Garmin Connect relays a compact copy) → watch (one angle per screen, one press per cut)">
+</p>
 
-Admins sign in as a named user and edit one shared catalog stored in Neon Postgres through same-origin Vercel Functions. Every successful catalog save is revision-locked and logged to a change history.
+<table>
+<tr>
+<td width="44%" align="center"><img src="docs/assets/watch-flow.gif" width="260" alt="Watch loop: open angle, green after START, automatic jump, red missed angle"></td>
+<td>
 
-How the two set-ups work and how angles above 45° are cut on a saw whose blade
-tilts only to 45°: [`docs/CUTTING.md`](docs/CUTTING.md).
+**At the saw**
 
----
+1. Set the saw to the angle on the wrist.
+2. Cut, press **START** — the screen turns **green** and the watch buzzes once.
+3. 0.7 s later the **next open angle** is on the screen. No scrolling.
+4. Marked an angle while a higher one is still open? **Two buzzes** and the skipped one turns **red** — noticed at the saw, not at assembly.
+5. Every press is saved on the watch; it keeps working without the phone.
+
+</td>
+</tr>
+</table>
 
 ## Features
 
-| | |
-|---|---|
-| **Shared catalog** | Read with a workshop code or an admin session (`GET /api/state`); admin save via `PUT /api/state` |
-| **Workshop access** | Operators open the catalog with one shared code (30 days per device); a new code signs every device out |
-| **First run** | Empty database → create the admin and the workshop code; empty catalog → guide to add holds, angles, drawings |
-| **Dual-table view** | MAIN and STEFAN angle tables, sortable asc/desc |
-| **Multi-select products** | Select any number of products; tables update instantly |
-| **Drawing viewer** | Click a row to show a drawing; zoom and dedicated print are available |
-| **Print mode** | ALL / MAIN / STEFAN layouts for A4 reference sheets |
-| **Admin panel** | Add, rename, delete holds and angles; upload drawings and cover images |
-| **Named admins** | Created on first run or seeded by `npm run db:setup`; each changes their own password in SETTINGS |
-| **Change history** | Admin `HISTORY` view shows who changed what and when |
-| **Change notification** | Logged-in users are notified when another user changed the database |
-| **Work mode** | Device-local progress for checked angles and work theme |
-| **Import / Export** | Export JSON backups (images inlined); import stages a draft that is persisted on SAVE |
-| **Merge on conflict** | Two admins saving at once: changes are combined; only true conflicts ask who wins |
-| **Private images** | Covers and drawings in a private Vercel Blob store, served after the same access check |
-| **Garmin watch app** | Angles of selected holds on the wrist: BIG MODE, colored list, auto-jump with vibration after each cut, saved progress — see [`garmin/README.md`](garmin/README.md) |
-| **Stations** | One job per saw or operator; ⌚ sends the selected holds to one station, so jobs never overwrite each other |
-| **Watch pairing** | Watches pair to a station with a 6-digit code; the server stores only a hash of the watch token |
+<table>
+<tr>
+<td width="50%" valign="top">
 
----
+<img src="docs/assets/icons/lock.svg" width="20" alt=""> **Protected catalog** — operators open it with a workshop code (30 days per device), admins with their own password. A new code signs every device out.
 
-## Tech Stack
+</td>
+<td width="50%" valign="top">
 
-- **React 19** and **Vite 8** for the SPA
-- **Vercel Functions** in `/api` for auth, catalog state, and history
-- **Neon Postgres** for users, shared catalog JSON, and audit log
-- **httpOnly HMAC session cookie** for admin sessions
-- **localStorage** only for device-local UI state such as work progress, work theme, and last-seen change id
-- **react-hot-toast** for notifications
-- **Connect IQ / Monkey C** for the Garmin watch app (`garmin/`)
+<img src="docs/assets/icons/station.svg" width="20" alt=""> **Stations** — one job per saw or operator. Sending a job to one station never touches another.
 
----
+</td>
+</tr>
+<tr>
+<td valign="top">
 
-## Project Structure
+<img src="docs/assets/icons/watch.svg" width="20" alt=""> **Garmin watch app** — BIG MODE, colored list, auto-jump with vibration, offline after sync. Paired to a station with a 6-digit code.
 
-```text
-Angles-proto-garmin-app/
-├── api/                 # Vercel Functions (auth, state, history) + _lib shared logic
-│   ├── _lib/            # auth, session, db, stateService, rateLimit, schema.sql
-│   ├── login.js  logout.js  session.js
-│   ├── state.js         # GET/PUT shared catalog
-│   ├── history.js       # GET audit log
-│   ├── account/[action].js  # first run, workshop code, password, status
-│   ├── images.js        # private Blob images (upload / read)
-│   └── watch.js         # watch catalog (paired token), pairing, stations, Send to watch
-├── src/                 # React SPA
-│   ├── components/      # shared UI + AdminPage.jsx (the admin surface lives here today)
-│   ├── features/        # operator/ split out; admin/ is a thin re-export stub for now
-│   ├── domain/          # pure logic: angles, holds, diff, validation, migration
-│   ├── storage/         # client data access: auth, history, import/export, work progress
-│   ├── utils/           # helpers (image handling)
-│   ├── App.jsx  main.jsx
-│   └── contexts/ hooks/ constants/ styles/ assets/
-├── garmin/              # Connect IQ watch app (Monkey C) — see garmin/README.md
-├── scripts/             # db-setup.mjs, seed-users.mjs
-├── docs/                # CUTTING, ARCHITECTURE, DEVELOPMENT, ROADMAP, RELEASE_NOTES, OPERATIONS, screenshots/
-├── public/              # static assets
-├── vercel.json          # security headers + routing
-└── vite.config.js
-```
+</td>
+<td valign="top">
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how these fit together.
+<img src="docs/assets/icons/merge.svg" width="20" alt=""> **Merge on conflict** — two admins saving at once: changes are combined; only true conflicts ask who wins.
 
----
+</td>
+</tr>
+<tr>
+<td valign="top">
 
-## Quick Start
+<img src="docs/assets/icons/image.svg" width="20" alt=""> **Drawings in private storage** — covers and cutting drawings live in a private Vercel Blob store, served after the same access check.
 
-For UI-only development:
+</td>
+<td valign="top">
+
+<img src="docs/assets/icons/blade.svg" width="20" alt=""> **First run** — an empty install asks for the admin and the workshop code, then guides you to add holds, angles and drawings.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+<img src="docs/assets/icons/pulse.svg" width="20" alt=""> **Work mode and print** — phone-friendly tick-off list, A4 sheets for ALL / MAIN / STEFAN.
+
+</td>
+<td valign="top">
+
+<img src="docs/assets/icons/cloud.svg" width="20" alt=""> **History and backups** — every save is logged with the admin's name; EXPORT makes a self-contained JSON backup.
+
+</td>
+</tr>
+</table>
+
+## Screenshots
+
+All screenshots use demo data.
+
+**Web**
+
+<p align="center">
+  <img src="docs/screenshots/web-desktop.png" width="900" alt="Desktop: two demo holds selected, MAIN and STEFAN tables">
+  <br><sub>Pick the holds of the job: one merged list for MAIN and one for STEFAN.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/web-send-to-station.png" width="290" alt="Send to watch dialog with two stations">
+  &nbsp;
+  <img src="docs/screenshots/web-workshop-code.png" width="290" alt="Workshop code screen">
+  &nbsp;
+  <img src="docs/screenshots/web-phone-work.png" width="150" alt="Phone work mode list">
+  <br><sub>Send a job to a station · workshop access · phone work mode</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/web-first-run.png" width="250" alt="Welcome to Angles first-run form">
+  &nbsp;
+  <img src="docs/screenshots/web-admin-settings.png" width="520" alt="Admin settings: workshop code, password, images, stations and watches">
+  <br><sub>First run · admin settings (workshop code, password, images, stations and watches)</sub>
+</p>
+
+**Garmin watch** (Instinct 3 AMOLED 45mm simulator)
+
+| Holds | Pairing | BIG MODE | Cut | Missed | List |
+|---|---|---|---|---|---|
+| <img src="garmin/docs/screenshots/holds.png" width="120" alt="Holds screen"> | <img src="garmin/docs/screenshots/pair.png" width="120" alt="Pair watch screen with a 6-digit code"> | <img src="garmin/docs/screenshots/big-open.png" width="120" alt="BIG MODE open angle"> | <img src="garmin/docs/screenshots/big-cut.png" width="120" alt="BIG MODE angle cut, green"> | <img src="garmin/docs/screenshots/big-missed.png" width="120" alt="BIG MODE missed angle, red"> | <img src="garmin/docs/screenshots/list.png" width="120" alt="Colored list"> |
+
+## Cutting angles above 45°
+
+The saw blade tilts only up to 45°. Angles up to 45° are cut on the normal
+clamping beam with the panel flat (**MAIN**). For steeper edges a second
+clamping beam on the saw holds the blank **upright** (**STEFAN**): with the
+panel standing, the same 0–45° tilt produces edges above 45°
+(`edge = 90° − tilt`). The app keeps both lists apart, sorted high → low so the
+tilt moves one way through the job. Details: [`docs/CUTTING.md`](docs/CUTTING.md).
+
+## Garmin watch
+
+1. Install the `.prg` on the watch (USB, `GARMIN\APPS`).
+2. Admin: **SETTINGS → OPEN PAIRING**. Watch: **FROM PHONE** shows a 6-digit code. Admin enters it and picks the station.
+3. Operators press **⌚** on the website, pick the station, then **FROM PHONE** on the watch.
+
+Step by step with troubleshooting: [`docs/WATCH_SETUP.md`](docs/WATCH_SETUP.md).
+Several sawyers and watches: [`docs/MULTI_OPERATOR.md`](docs/MULTI_OPERATOR.md).
+Watch app internals and build: [`garmin/README.md`](garmin/README.md).
+
+## Quick start
 
 ```bash
 npm install
-npm run dev
+npm run dev          # UI only; /api needs Vercel dev
 ```
 
-Vite serves the SPA at the URL it prints, usually `http://localhost:5173`. The plain Vite server does **not** run `/api`, so shared catalog and login calls need Vercel dev.
-
-For full local development with backend functions:
+Full stack locally:
 
 ```bash
-npm install
 vercel env pull .env.local
 node --env-file=.env.local scripts/db-setup.mjs
 vercel dev
 ```
 
-Required server-only environment variables:
+Server-only environment variables (never with a `VITE_` prefix):
 
 ```env
 DATABASE_URL=postgresql://...
 SESSION_SECRET=long-random-secret
-SEED_PASSWORD_TOMEK=...
-SEED_PASSWORD_ALESSANDRO=...
-SEED_PASSWORD_ARTSI=...
-SEED_WORKSHOP_CODE=...          # optional initial workshop code
-SETUP_TOKEN=...                 # required on Vercel for the first-run screen
+SETUP_TOKEN=...                 # 24+ chars; the first-run screen asks for it
 BLOB_READ_WRITE_TOKEN=...       # set by connecting a private Vercel Blob store
+SEED_WORKSHOP_CODE=...          # optional initial workshop code
 ```
 
-The seed variables are optional: on an empty database the app itself offers
-the first-run screen. Full deploy, first run and upgrade steps:
-[`docs/OPERATIONS.md`](docs/OPERATIONS.md#0-deploy-and-first-run).
+On an empty database the app shows the first-run screen; seeding users from env
+(`SEED_PASSWORD_<NAME>` or `SEED_USER_PASSWORDS`) is optional. Deploy, first run
+and upgrade from v1.5: [`docs/OPERATIONS.md`](docs/OPERATIONS.md#0-deploy-and-first-run).
 
-Alternatively, set `SEED_USER_PASSWORDS` to a JSON object such as
-`{"Tomek":"...","Alessandro":"...","Artsi":"..."}`. The legacy
-`password = username` seed mode is available only with
-`ALLOW_WEAK_SEED_PASSWORDS=true` and should be used for local/internal setup
-only.
-
-Build and tests:
+Quality gates (all enforced in CI):
 
 ```bash
-npm run lint
-npm test
-npm run build
-npm run audit
+npm run lint && npm test && npm run build && npm run audit
 ```
 
----
+<details>
+<summary><b>Project structure</b></summary>
 
-## Admin Panel
+```text
+api/                     Vercel Functions
+├── _lib/                auth, sessions, access, rate limit, stores, schema.sql
+├── account/[action].js  first run, workshop code, password, status
+├── state.js             GET/PUT shared catalog (revision-locked)
+├── history.js           audit log
+├── images.js            private Blob images (upload / read)
+├── watch.js             watch catalog (paired token), pairing, stations, Send to watch
+└── login.js logout.js session.js
+src/                     React SPA
+├── features/            access (gate, onboarding), admin (settings, stations, images, merge), operator
+├── components/          shared UI, AdminPage
+├── domain/              pure logic: angles, migration, diff, merge
+├── storage/             API clients, import/export, work progress
+└── App.jsx main.jsx
+garmin/                  Connect IQ watch app (Monkey C)
+docs/                    CUTTING, WATCH_SETUP, MULTI_OPERATOR, OPERATIONS, ARCHITECTURE, ROADMAP, assets/
+```
 
-Open `/#/admin` or click **ADMIN** in the app.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+</details>
 
-- Login uses username + password against `/api/login`.
-- Admins are created on the first-run screen or seeded by `npm run db:setup` (explicit passwords from env).
-- The session is stored only as a server-set httpOnly cookie.
-- Admin SAVE sends the full catalog plus server revision to `PUT /api/state`.
-- If the catalog changed since the admin loaded it, the server returns `409 stale_revision`; the UI merges the draft with the latest catalog by hold/angle id and saves again, asking only when the same record changed on both sides.
-- `SETTINGS`: workshop code, own password, moving images to storage, stations and watch pairing.
-- The `HISTORY` tab reads `GET /api/history` and displays the newest audit rows.
+<details>
+<summary><b>Admin panel</b></summary>
 
----
+- Open `/#/admin` or click **ADMIN**. Sign-in is checked only by the server; the session is an httpOnly cookie that carries a fingerprint of the password, so a password change signs out every other device.
+- **SAVE** sends the full catalog with its revision. If someone saved meanwhile, the draft is merged with the latest catalog by hold/angle id and saved again; only true conflicts ask who wins.
+- **HISTORY** shows who changed what and when.
+- **SETTINGS**: workshop code, own password, moving images to storage, stations and watch pairing.
+- **EXPORT** downloads a self-contained JSON backup (images inlined); **IMPORT** stages a draft that reaches the database only on SAVE.
+</details>
 
-## Data & Storage
+<details>
+<summary><b>Data and storage</b></summary>
 
-- Shared catalog data lives in Neon Postgres `app_state.data` as a single JSON document.
-- `app_state.revision` is the optimistic concurrency token for saves.
-- `change_log` records hold/angle adds, deletes, renames, saw changes, and value changes.
-- Image-only changes are persisted but not logged as audit events.
-- Work-mode progress and theme are intentionally device-local in `localStorage`.
-- `settings` keeps the workshop code hash and version; `stations` keeps one job per station; `watch_devices` keeps the SHA-256 of each paired watch token.
-- Covers and drawings are stored in a private Vercel Blob store and referenced as `/api/images?p=img/<id>`; data URLs are still accepted when no store is linked.
-- Export downloads the visible catalog/draft as JSON.
-- Import validates and stages a draft; it reaches the shared database only after SAVE.
-- Only raster images (PNG, JPEG, WebP, GIF) are accepted; SVG is rejected.
-
----
-
-## Screenshots
-
-**Web** (live at [avacut.vercel.app](https://avacut.vercel.app)):
-
-| Desktop: two holds selected, MAIN and STEFAN tables | Phone work mode |
-|---|---|
-| <img src="docs/screenshots/web-desktop.png" width="560"> | <img src="docs/screenshots/web-phone-work.png" width="220"> |
-
-**Garmin watch** (Instinct 3 AMOLED 45mm simulator):
-
-| Holds | BIG MODE | Cut | LIST | About |
-|---|---|---|---|---|
-| <img src="garmin/docs/screenshots/holds.png" width="150"> | <img src="garmin/docs/screenshots/big-open.png" width="150"> | <img src="garmin/docs/screenshots/big-cut.png" width="150"> | <img src="garmin/docs/screenshots/list.png" width="150"> | <img src="garmin/docs/screenshots/about.png" width="150"> |
-
----
-
-## Garmin watch app
-
-At the saw both hands are busy, so the next angle lives on the wrist:
-
-0. Once per watch: install the app and pair it to a station with the 6-digit
-   code it shows ([`docs/WATCH_SETUP.md`](docs/WATCH_SETUP.md)).
-1. Select holds on the website, press **⌚** and pick the station (or tick holds on the watch).
-2. Open **BIG MODE**: one angle per screen, set-up on top, hold name below.
-3. Set the saw, cut, press **START**: the screen turns green, the watch buzzes
-   once and jumps to the next open angle by itself.
-4. A skipped angle turns red and the press that skipped it buzzes twice.
-5. Progress is saved on the watch; without the phone it works on its last copy.
-
-Details, buttons, build and sideload: [`garmin/README.md`](garmin/README.md).
-Several sawyers and watches without overwriting each other's work:
-[`docs/MULTI_OPERATOR.md`](docs/MULTI_OPERATOR.md).
-
----
+- Neon Postgres: `app_state` (catalog JSON + revision), `change_log`, `users`, `settings` (workshop code hash and version), `stations` (one job each), `watch_devices` (SHA-256 of each watch token), `login_attempts`.
+- Covers and drawings: private Vercel Blob store, referenced as `/api/images?p=img/<id>`; data URLs still work when no store is linked.
+- Device-local only: work-mode progress, theme, last chosen station.
+- Raster images only (PNG, JPEG, WebP, GIF); SVG is rejected.
+</details>
 
 ## Security
 
-Security headers are configured in [`vercel.json`](vercel.json): CSP, HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy`.
+- Catalog, images, stations and the watch API need a workshop-code device, an admin session or a paired watch token. The workshop cookie uses a key derived from `SESSION_SECRET` and can never pass as an admin session.
+- Wrong workshop codes, setup tokens, pairing requests, unknown watch tokens and wrong pairing codes are throttled (IPv6 per /64, plus a global cap for workshop codes). Watches get codes only while an admin has pairing open.
+- The first-run screen needs `SETUP_TOKEN` in production, so a fresh deploy cannot be claimed by someone else.
+- CSP, HSTS and frame headers in [`vercel.json`](vercel.json); secret scanning and `npm audit` in CI.
 
-Known limitations:
-
-- Seeded passwords must be supplied through env; `password = username` is opt-in only via `ALLOW_WEAK_SEED_PASSWORDS=true`.
-- `/api/login` is rate-limited by a shared Neon-backed throttle (per IP + username, 15-min window); it fails open if the throttle store is unavailable.
-- The catalog, images, stations and the watch API need a workshop-code device, an admin session, or a paired watch token. The workshop cookie is signed with a key derived from `SESSION_SECRET` and cannot be used as an admin session.
-- Workshop code guesses, setup token guesses, pairing requests and wrong pairing codes are throttled like logins.
-- The first-run screen requires `SETUP_TOKEN` on Vercel, so a fresh deploy cannot be claimed by someone else.
-- Admin sessions (12 h) carry a fingerprint of the password hash: changing the password signs out every other device. Changing the workshop code asks for the admin's password.
-- IPv6 clients are throttled per /64; wrong workshop codes are also capped globally.
-- Secrets stay server-side only (`DATABASE_URL`, `SESSION_SECRET`).
-
-Current docs: [`THREAT_MODEL.md`](THREAT_MODEL.md), [`SECURITY_DEBT.md`](SECURITY_DEBT.md), [`SECURITY_CHECKLIST.md`](SECURITY_CHECKLIST.md).
-
-Historical pre-backend audit: [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md).
-
-Vulnerability reporting: see [`SECURITY.md`](SECURITY.md) — do not open public issues for security problems.
-
----
+Details: [`THREAT_MODEL.md`](THREAT_MODEL.md), [`SECURITY_DEBT.md`](SECURITY_DEBT.md), [`SECURITY_CHECKLIST.md`](SECURITY_CHECKLIST.md). Reporting: [`SECURITY.md`](SECURITY.md).
 
 ## Roadmap
 
-Full detail in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- **v2.0 — current.** Workshop access, first run, password change, stations and watch pairing, private image storage, merge on conflict.
+- **v2.1 — next.** Branch protection, live watch status, optional per-operator accounts.
 
-- **v2.0 — current.** Workshop access code, first-run setup, password change,
-  stations and watch pairing, private image storage, stale-save merge.
-- **v2.1 — next.** Branch protection on the public repo, live watch status,
-  optional per-operator accounts.
-
----
-
-## Known Limitations
-
-General product and operational limitations. Security-specific risks and
-trade-offs are covered in [Security](#security) above.
-
-- **Online-only.** Without a reachable backend the app shows a no-connection
-  retry screen; the shared catalog is never the source of truth in the browser.
-- **Images without a Blob store.** A deployment without a linked private Blob
-  store keeps images as base64 inside the catalog JSON (the v1 behaviour).
-- **Shared workshop code.** Operators share one code; per-operator accounts are
-  not built in. Rotate the code when someone leaves.
-- **Internal-network deployment.** Angles targets a trusted internal workshop
-  network rather than open public exposure; see [`SECURITY_DEBT.md`](SECURITY_DEBT.md).
-
----
-
-## Maintainer Notes
-
-- **Quality gates** are `npm run lint`, `npm test`, `npm run build`,
-  `npm run audit` — all enforced in CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
-  and required before merging. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
-- **Secrets are server-only** (`DATABASE_URL`, `SESSION_SECRET`, seed passwords)
-  and must never use a `VITE_` prefix. Database dumps must stay out of the repo
-  ([`docs/OPERATIONS.md`](docs/OPERATIONS.md)).
-- **Most common real failure is operational**, not code — a missing env var or
-  un-run `db:setup` surfaces as the no-connection screen. Preview deploys lack
-  `SESSION_SECRET` (Production-only).
-- **Mobile CSS is fragile** (`!important` media-query overrides); verify on a
-  narrow viewport after layout changes.
-- Workshop context (MAIN / STEFAN, cuts above 45°): [`docs/CUTTING.md`](docs/CUTTING.md).
-- Backup/restore: [`docs/OPERATIONS.md`](docs/OPERATIONS.md). Architecture:
-  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Dev setup:
-  [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
-
----
+Full list: [`docs/ROADMAP.md`](docs/ROADMAP.md) · changes: [`CHANGELOG.md`](CHANGELOG.md) · story: [`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md).
 
 ## License
 

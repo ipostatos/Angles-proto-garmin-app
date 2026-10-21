@@ -146,7 +146,7 @@ export function AccessGate({ onUnlocked }) {
     }
 
     return (
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, boxSizing: "border-box", background: theme.colors.background }}>
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, boxSizing: "border-box", background: theme.colors.background, fontFamily: theme.fonts.sans, color: theme.colors.textPrimary }}>
             {body}
         </div>
     );

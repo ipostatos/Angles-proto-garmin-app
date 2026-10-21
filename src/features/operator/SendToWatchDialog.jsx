@@ -40,7 +40,7 @@ export function SendToWatchDialog({ holdNames, onClose }) {
             aria-modal="true"
             aria-labelledby="send-watch-title"
             onClick={onClose}
-            style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.32)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+            style={{ position: "fixed", inset: 0, fontFamily: theme.fonts.sans, color: theme.colors.textPrimary, zIndex: 9999, background: "rgba(0,0,0,0.32)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
         >
             <div
                 onClick={(e) => e.stopPropagation()}

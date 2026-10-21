@@ -863,14 +863,14 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
                             <div className="adminFooterDivider" style={{ borderTop: `1px solid ${theme.colors.borderLight}`, marginTop: 16, paddingTop: 16, display: "flex", gap: 8 }}>
                                 <button
                                     type="button"
-                                    style={{ ...styles.btnGhost, flex: 1, fontWeight: adminView === "catalog" ? 700 : 400 }}
+                                    style={{ ...styles.btnGhost, flex: 1, minWidth: 0, padding: "0 4px", fontSize: 11, fontWeight: adminView === "catalog" ? 700 : 400 }}
                                     onClick={() => setAdminView("catalog")}
                                 >
                                     CATALOG
                                 </button>
                                 <button
                                     type="button"
-                                    style={{ ...styles.btnGhost, flex: 1, fontWeight: adminView === "history" ? 700 : 400 }}
+                                    style={{ ...styles.btnGhost, flex: 1, minWidth: 0, padding: "0 4px", fontSize: 11, fontWeight: adminView === "history" ? 700 : 400 }}
                                     onClick={() => {
                                         setAdminView("history");
                                         onHistoryViewed?.();
@@ -881,7 +881,7 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
                                 </button>
                                 <button
                                     type="button"
-                                    style={{ ...styles.btnGhost, flex: 1, fontWeight: adminView === "settings" ? 700 : 400 }}
+                                    style={{ ...styles.btnGhost, flex: 1, minWidth: 0, padding: "0 4px", fontSize: 11, fontWeight: adminView === "settings" ? 700 : 400 }}
                                     onClick={() => setAdminView("settings")}
                                 >
                                     SETTINGS

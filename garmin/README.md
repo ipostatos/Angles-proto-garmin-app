@@ -12,7 +12,7 @@ models).
 
 <p align="center">
   <img src="docs/screenshots/flow-big-mode.png" width="860" alt="BIG MODE: open angle, cut (green), automatic jump to the next angle, missed angle (red)">
-  <br><sub>BIG MODE: open angle → START (green) → automatic jump with a short buzz → a skipped angle turns red</sub>
+  <br><sub>BIG MODE on demo data: open angle → START (green) → automatic jump with a short buzz → a skipped angle turns red</sub>
 </p>
 
 ## Why a watch
@@ -52,10 +52,12 @@ see [`../docs/CUTTING.md`](../docs/CUTTING.md).
 
 ## Screens
 
-| Holds | BIG MODE | LIST | About |
-|---|---|---|---|
-| <img src="docs/screenshots/holds.png" width="200"> | <img src="docs/screenshots/big-open.png" width="200"> | <img src="docs/screenshots/list.png" width="200"> | <img src="docs/screenshots/about.png" width="200"> |
-| Actions on top, then every hold with a checkbox. | One big angle, set-up and hold. | All angles, colored; the focus also jumps after a cut. | Version and a short description. |
+| Holds | Pairing | BIG MODE | LIST | About |
+|---|---|---|---|---|
+| <img src="docs/screenshots/holds.png" width="170" alt="Holds screen"> | <img src="docs/screenshots/pair.png" width="170" alt="Pair watch, 6-digit code"> | <img src="docs/screenshots/big-open.png" width="170" alt="BIG MODE"> | <img src="docs/screenshots/list.png" width="170" alt="Colored list"> | <img src="docs/screenshots/about.png" width="170" alt="About screen"> |
+| Actions on top, then every hold with a checkbox. | The code an admin enters in SETTINGS. | One big angle, set-up and hold. | All angles, colored; the focus also jumps after a cut. | Version and a short description. |
+
+Screenshots use demo data.
 
 **Holds screen** (start screen):
 
