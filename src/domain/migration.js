@@ -29,6 +29,16 @@ export function isSafeRasterDataUrl(s) {
     return typeof s === 'string' && /^data:image\/(png|jpe?g|webp|gif);/i.test(s);
 }
 
+/** An image kept in private storage, served by our own /api/images. */
+export function isStoredImageRef(s) {
+    return typeof s === 'string' && /^\/api\/images\?p=img\/[0-9a-f]{32}\.(jpg|png|webp|gif)$/.test(s);
+}
+
+/** Allowed values for coverImage / drawing: a raster data URL or a stored image. */
+export function isSafeImageSrc(s) {
+    return isSafeRasterDataUrl(s) || isStoredImageRef(s);
+}
+
 export const LS_VERSION = 1;
 
 export const DEFAULT_HOLDS = ['Anton'];
@@ -55,7 +65,7 @@ function sanitizeAngle(a, holdsSet) {
 
     const id = typeof a?.id === 'string' && a.id.trim() ? a.id : cryptoRandomId();
 
-    const drawing = isSafeRasterDataUrl(a?.drawing) ? a.drawing : undefined;
+    const drawing = isSafeImageSrc(a?.drawing) ? a.drawing : undefined;
 
     if (!hold || !holdsSet.has(hold)) return null;
 
@@ -117,7 +127,7 @@ function sanitizeV2(data) {
             .map(h => ({
                 id: h.id,
                 name: normalizeHoldName(h.name),
-                ...(isSafeRasterDataUrl(h.coverImage) ? { coverImage: h.coverImage } : {}),
+                ...(isSafeImageSrc(h.coverImage) ? { coverImage: h.coverImage } : {}),
             }))
         : [];
 
@@ -131,7 +141,7 @@ function sanitizeV2(data) {
                 holdId: a.holdId,
                 value: clamp(Number(a.value) || 0, 0, 90),
                 saw: a.saw === 'stefan' ? 'stefan' : 'main',
-                ...(isSafeRasterDataUrl(a.drawing) ? { drawing: a.drawing } : {}),
+                ...(isSafeImageSrc(a.drawing) ? { drawing: a.drawing } : {}),
             }))
         : [];
 

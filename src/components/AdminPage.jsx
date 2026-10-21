@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AdminSettings } from '../features/admin/AdminSettings.jsx';
 import { AdminStations } from '../features/admin/AdminStations.jsx';
+import { AdminImages } from '../features/admin/AdminImages.jsx';
 import toast from 'react-hot-toast';
 import { clamp, toAngleLabel } from '../domain/angles.js';
 import { getSortedHoldNames, generateHoldId, migrateAndSanitize } from '../domain/migration.js';
@@ -9,6 +10,7 @@ import { pushBackup } from '../storage/backups.js';
 import { downloadJsonFile, readJsonFile } from '../storage/importExport.js';
 import { loadHistory } from '../storage/history.js';
 import { compressImageFile } from '../utils/image.js';
+import { inlineStoredImages, storeImage } from '../utils/storedImages.js';
 import { cryptoRandomId } from '../utils/id.js';
 import { SaveIcon } from './icons.jsx';
 import { ConfirmDialog } from './ConfirmDialog.jsx';
@@ -410,7 +412,8 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
         uploadTargetIdRef.current = null;
 
         compressImageFile(file)
-            .then((dataUrl) => updateAngle(angleId, { drawing: dataUrl }))
+            .then(storeImage)
+            .then((src) => updateAngle(angleId, { drawing: src }))
             .catch((err) => {
                 console.warn("Image upload failed:", err);
                 toast.error("Could not process this image. Try another file.");
@@ -425,11 +428,12 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
         if (!file || !holdId) return;
 
         compressImageFile(file, 900, 0.85)
-            .then((dataUrl) => {
+            .then(storeImage)
+            .then((src) => {
                 updateAdminData((prev) => ({
                     ...prev,
                     holds: prev.holds.map(h =>
-                        h.id === holdId ? { ...h, coverImage: dataUrl } : h
+                        h.id === holdId ? { ...h, coverImage: src } : h
                     ),
                 }));
             })
@@ -449,7 +453,7 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
         }));
     }, [askConfirm, selectedProduct, updateAdminData]);
 
-    const exportDb = useCallback(() => {
+    const exportDb = useCallback(async () => {
         const now = new Date();
         const yyyy = now.getFullYear();
         const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -457,7 +461,13 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
         const hh = String(now.getHours()).padStart(2, "0");
         const min = String(now.getMinutes()).padStart(2, "0");
         const filename = `Base_${yyyy}-${mm}-${dd}_${hh}-${min}.json`;
-        downloadJsonFile(draftData, filename);
+        try {
+            // stored images go back inline so the backup does not depend on the server
+            downloadJsonFile(await inlineStoredImages(draftData), filename);
+        } catch (err) {
+            console.warn("Export failed:", err);
+            toast.error("Could not export: some images could not be read.");
+        }
     }, [draftData]);
 
     const triggerImportDb = useCallback(async () => {
@@ -887,6 +897,7 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
                 {adminView === "settings" ? (
                     <Card style={styles.card}>
                         <AdminSettings styles={styles}>
+                            <AdminImages styles={styles} hasUnsavedChanges={hasUnsavedChanges} onCatalogSaved={onCatalogSaved} />
                             <AdminStations styles={styles} />
                         </AdminSettings>
                     </Card>
