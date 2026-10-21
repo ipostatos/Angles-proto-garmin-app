@@ -20,7 +20,7 @@ import { SearchIcon } from './icons.jsx';
 import { Card } from './Card.jsx';
 import { theme, getStyles } from '../styles/theme.js';
 
-const APP_VERSION = "1.5";
+const APP_VERSION = "2.0";
 
 export function formatLastModified(ms) {
     if (!ms || !Number.isFinite(ms)) return "—";

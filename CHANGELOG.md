@@ -3,6 +3,45 @@
 All notable changes to this project are documented here. This project loosely
 follows [Semantic Versioning](https://semver.org/).
 
+## v2.0 — access, stations, storage
+
+### Added
+- **Workshop access.** `GET /api/state` (and images, stations, watch catalog)
+  needs an admin session or a workshop-code device. Operators enter the code
+  once; the `angles_access` cookie lasts 30 days and is signed with a key
+  derived from `SESSION_SECRET`, so it can never pass as an admin session.
+  Setting a new code signs every operator device out.
+- **First run.** With no admin in the database the app shows *Welcome to
+  Angles*: create the admin and the workshop code (needs `SETUP_TOKEN` on
+  Vercel). An admin with an empty catalog gets a short guide: holds, angles,
+  drawings, SAVE.
+- **ADMIN → SETTINGS:** workshop code, own password, images, stations and
+  watches. Password and code changes are logged in HISTORY.
+- **Stations.** One job per saw or operator; ⌚ asks which station. The old
+  single watch selection becomes station *Saw 1*.
+- **Watch pairing.** Watches identify themselves with a token they generate;
+  the server stores only its SHA-256. A 6-digit code (15 min) pairs a watch to
+  a station; admins can move or unpair watches. Pairing requests and wrong
+  codes are throttled.
+- **Garmin app 1.2:** PAIR WATCH screen with the code and automatic polling,
+  station name under FROM PHONE, empty bundled catalog (`build-catalog.mjs`
+  now reads an admin EXPORT).
+- **Private image storage.** New covers and drawings go to a private Vercel
+  Blob store and are served by `/api/images` after the same access check.
+  SETTINGS → IMAGES moves existing ones; EXPORT puts them back inline.
+- **Stale-save merge.** A save that hits `409` is merged three-way with the
+  latest catalog; the admin is asked only when the same record changed on both
+  sides.
+- Docs: `docs/WATCH_SETUP.md`, `docs/MULTI_OPERATOR.md`, deploy / first run /
+  upgrade in `docs/OPERATIONS.md`.
+
+### Changed
+- `POST /api/watch` without a session is gone (closes D15); the watch API is
+  `GET /api/watch` with a paired token.
+- Expired `login_attempts` rows are swept on successful sign-in (F5).
+- Client IP for throttling prefers `x-vercel-forwarded-for`.
+- `api/**/*.test.js` excluded from deployed functions (`.vercelignore`).
+
 ## Garmin app v1.1
 
 ### Added

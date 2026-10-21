@@ -2,7 +2,7 @@
 
 <img src="docs/screenshots/icon.png" width="72" align="right" alt="Angles launcher icon: a saw blade">
 
-**Version 1.1.** A Connect IQ watch app (Monkey C) that puts the saw angles of
+**Version 1.2.** A Connect IQ watch app (Monkey C) that puts the saw angles of
 the selected holds on the wrist of the operator. No drawings or images, only
 hold names and MAIN / STEFAN angles, one press per cut.
 
@@ -25,8 +25,11 @@ is already on the screen.
 
 ## How it works at the saw
 
-1. **Pick the job.** Select holds on the website and press **⌚ Send to watch**,
-   or tick them on the watch itself.
+0. **Pair once.** FROM PHONE → the watch shows a 6-digit code → an admin enters
+   it in SETTINGS and picks the station (saw or operator). Step by step:
+   [`../docs/WATCH_SETUP.md`](../docs/WATCH_SETUP.md).
+1. **Pick the job.** Select holds on the website, press **⌚** and choose the
+   station, or tick holds on the watch itself.
 2. **Open BIG MODE.** One angle per screen in large digits: the set-up
    (MAIN / STEFAN) on top, the hold name below, the position in the job at the
    bottom.
@@ -61,8 +64,8 @@ see [`../docs/CUTTING.md`](../docs/CUTTING.md).
 | **LIST** | All angles of the selected holds as a colored list. |
 | **RESET PROGRESS** | Asks *Reset progress?*, then clears the cut marks. Keeps the selected holds. |
 | **RESET HOLDS** | Asks *Untick all holds?*, then unticks all holds. Keeps the cut marks. |
-| **FROM PHONE** | Pulls the holds sent from the website. Shows `no phone / offline` if it fails. |
-| **ABOUT** · `version 1.1` | Saw blade icon, version and a short description. |
+| **FROM PHONE** · station name | Pulls the catalog and this station's job. Not paired yet: opens **PAIR WATCH** with the code. Shows `no phone / offline` if it fails. |
+| **ABOUT** · `version 1.2` | Saw blade icon, version and a short description. |
 | hold names | START ticks / unticks a hold (green box = picked). |
 
 **Buttons everywhere:** UP / DOWN move, START selects or marks, BACK goes back.
@@ -84,26 +87,47 @@ set-up is already cut).
 All screens are drawn by the app itself (no system menus), so the Instinct 3
 round subscreen never covers a row.
 
-## Send to watch
+## Sync, pairing and stations
 
-1. On the website select holds and press the **⌚** button next to the print icon.
-2. The server stores that selection (`POST /api/watch`, table `watch_selection`).
+The watch talks to the server only through the phone (Garmin Connect +
+Bluetooth). It identifies itself with a random token made on first start; the
+server stores only its SHA-256 and answers nothing until an admin has paired
+the token to a **station**.
+
+1. On the website select holds, press **⌚** and pick the station.
+2. The server stores the job for that station (`POST /api/watch?a=send`).
 3. When the app starts (or on **FROM PHONE**) the watch calls `GET /api/watch`
-   through the phone (Garmin Connect app + Bluetooth must be on). A *new* send
-   replaces the picked holds and clears the cut marks; the same send is not
-   applied twice. The fresh catalog is cached too.
+   with `Authorization: Bearer <token>`. A *new* job replaces the picked holds
+   and clears the cut marks; the same job is not applied twice. The catalog is
+   cached too.
 
-Without the phone the app works on what it saved last time.
+Without the phone the app works on what it saved last time. Full guide with
+troubleshooting: [`../docs/WATCH_SETUP.md`](../docs/WATCH_SETUP.md); several
+operators: [`../docs/MULTI_OPERATOR.md`](../docs/MULTI_OPERATOR.md).
 
-### `/api/watch` response
+### `/api/watch` for the watch
 
-```json
-{ "r": 7, "h": [["Amon", [24.7, 39.8], [32, 39.8]], ...], "s": ["Amon"], "t": 1790939847 }
-```
+| Request | Answer |
+|---|---|
+| `GET /api/watch` (paired) | `200 { "r": 7, "h": [["Amon", [24.7, 39.8], [32, 39.8]], ...], "s": ["Amon"], "t": 1790939847, "n": "Saw 1" }` |
+| `GET /api/watch` (unknown token) | `401 { "e": "unpaired" }` |
+| `GET /api/watch` (waiting) | `403 { "e": "pending", "c": "123456" }` |
+| `POST /api/watch?a=pair` | `200 { "c": "123456" }` (valid 15 min) |
 
 `h` — catalog rows `[name, [main], [stefan]]` (no images, ~3.5 KB);
-`s` — hold names sent from the web; `t` — send time in unix **seconds**
-(fits a Connect IQ 32-bit Number).
+`s` — hold names of this station's job; `t` — send time in unix **seconds**
+(fits a Connect IQ 32-bit Number); `n` — station name.
+
+## What changed in 1.2
+
+- **Pairing:** PAIR WATCH screen with a 6-digit code; it polls every 5 s and
+  shows PAIRED with the station name when the admin approves. START asks again
+  (new code if the old one expired).
+- **Token:** every request carries the watch token; an unknown watch gets no
+  catalog.
+- **Station name** under FROM PHONE.
+- **No AVA data in the build:** the bundled offline catalog is empty by
+  default; the real catalog arrives on the first sync after pairing.
 
 ## What changed in 1.1
 
@@ -122,8 +146,8 @@ the SDK Manager, Java 17, and a developer key (`developer_key.der`). The key
 and build output are **not** committed (`.gitignore`).
 
 ```bash
-# 1. Optional: refresh the bundled offline catalog from production
-node garmin/tools/build-catalog.mjs
+# 1. Optional: bundle an offline catalog from an admin EXPORT (default: empty)
+node garmin/tools/build-catalog.mjs path/to/Base_export.json
 
 # 2. Optional: redraw the launcher icon (Python + Pillow)
 python garmin/tools/build-icon.py
@@ -133,9 +157,9 @@ monkeyc -f garmin/monkey.jungle -d instinct3amoled45mm -o garmin/bin/angles-inst
 monkeyc -f garmin/monkey.jungle -d fenix6pro           -o garmin/bin/angles-fenix6pro.prg           -y path/to/developer_key.der
 ```
 
-The bundled catalog (`resources/jsonData/catalog.json`) is only the fallback
-for the very first start without a phone; after one successful sync the watch
-uses its cached copy from the server.
+The bundled catalog (`resources/jsonData/catalog.json`) is empty in the
+repository. It is only a fallback for the very first start without a phone;
+after the first sync the watch uses its cached copy from the server.
 
 ## Install (sideload)
 
@@ -146,14 +170,15 @@ Replace the file to update. Saved holds and progress are kept across updates.
 
 | File | Purpose |
 |---|---|
-| `source/AnglesApp.mc` | App entry, version, catalog loading, sync with `/api/watch`. |
+| `source/AnglesApp.mc` | App entry, version, token, pairing and sync with `/api/watch`. |
 | `source/ScrollList.mc` | Shared full-screen list (focus row in the middle) + button delegate. |
 | `source/HoldsView.mc` | Holds screen, its actions and reset confirmations. |
 | `source/Progress.mc` | Ordered cut list, saved cut marks, missed detection, vibration, auto-advance timer. |
 | `source/BigView.mc` | BIG MODE screen and buttons. |
 | `source/AnglesView.mc` | Colored LIST view. |
 | `source/AboutView.mc` | ABOUT screen. |
-| `tools/build-catalog.mjs` | Writes the bundled catalog from `/api/state`. |
+| `source/PairView.mc` | PAIR WATCH screen: code, polling, PAIRED. |
+| `tools/build-catalog.mjs` | Writes the bundled catalog from an admin EXPORT file. |
 | `tools/build-icon.py` | Draws the saw blade launcher icon. |
 | `docs/screenshots/` | Simulator screenshots (Instinct 3 AMOLED 45mm). |
 

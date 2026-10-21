@@ -1,10 +1,9 @@
 # Roadmap
 
-Direction for Angles. Items are triaged from the Phase 1.5 stabilization review
-(`the Phase 1.5 stabilization review`). Nothing here is
-a commitment to a date — it is the planned order of work.
+Direction for Angles. Nothing here is a commitment to a date — it is the
+planned order of work.
 
-## v1.5 — current stable
+## v1.5 — shared backend
 
 The shared-backend, multi-user milestone. Catalog in Neon Postgres, server-side
 admin sessions, audit log, change notifications, and responsive UI polish. All
@@ -58,16 +57,28 @@ behavior moved and the PR is wrong):
   demo / production) is settled. Not part of stabilization.
 - Everything under v2.0 below.
 
-## v2.0 — larger / architectural
+## v2.0 — access, stations, storage (done)
 
-Bigger product or architecture changes:
+- **Access control** — the catalog is no longer public: operators use a
+  workshop code (30-day device cookie, code change signs everyone out), admins
+  their own password. **First run** creates the admin and the code; an
+  onboarding guide helps fill an empty catalog. Admins change their password
+  in SETTINGS (D4 / Identity).
+- **Stations and paired watches** — one job per station, watches paired with a
+  6-digit code and a token generated on the watch (closes D15).
+- **Image storage** — covers and drawings in a private Vercel Blob store,
+  served through the same access check (F6).
+- **Real stale-save merge** — three-way merge by hold/angle id; asks only on
+  true conflicts.
+- **Security housekeeping** — `login_attempts` pruning (F5), client IP from the
+  Vercel header, API tests excluded from deployed functions.
 
-- **Image storage** — move cover/drawing images out of the catalog JSON into
-  dedicated blob storage, shrinking payloads and removing the size cap as a
-  practical limit (F6).
-- **Identity** — self-service password rotation or an external identity
-  provider, retiring the seeded-password model (D4).
-- **Real stale-save merge** — proper merge/reapply flow instead of
-  reload-and-retry.
-- **Repo hardening** — branch protection, required status checks, and secret
-  push-protection on `main` (GitHub-UI setup; D11 residual).
+## v2.1 — next
+
+- Repo hardening on the public repository: branch protection, required status
+  checks, secret push-protection (D11 residual; GitHub UI).
+- Revoke admin sessions on password change (sessions are stateless 12 h tokens
+  today).
+- Live watch status on the website (last sync per watch is already stored).
+- Optional per-operator accounts instead of a shared workshop code, if the
+  team grows.

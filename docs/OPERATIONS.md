@@ -1,10 +1,59 @@
-# Operations — backup & restore
+# Operations — deploy, first run, backup & restore
 
-> Operational runbook for the Angles shared backend (Neon Postgres).
-> Scope: protecting the shared catalog and audit log against loss or corruption.
+> Operational runbook for the Angles shared backend (Vercel + Neon Postgres +
+> Vercel Blob). Scope: setting up an install, and protecting the shared catalog
+> and audit log against loss or corruption.
 
-The shared catalog and change history live in **Neon Postgres** (three tables:
-`users`, `app_state`, `change_log` — see [`api/_lib/schema.sql`](../api/_lib/schema.sql)).
+## 0. Deploy and first run
+
+### Environment variables (Vercel → Project → Settings → Environment Variables)
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `DATABASE_URL` | yes | Neon connection string. Server-only. |
+| `SESSION_SECRET` | yes | Long random string; signs admin sessions and (through a derived key) workshop access cookies. Rotating it signs everyone out. |
+| `SETUP_TOKEN` | yes on Vercel, for the first run | Random string the first-run screen asks for, so nobody else can claim a fresh deploy. Can be removed after the admin exists. |
+| `BLOB_READ_WRITE_TOKEN` | recommended | Set automatically when a **private** Vercel Blob store is connected to the project. Without it images stay inside the catalog JSON. |
+
+None of these may use a `VITE_` prefix.
+
+### Fresh install
+
+1. Create the Neon database and set the variables above (`SETUP_TOKEN` too).
+2. Deploy. Tables are created on first use (or run `npm run db:setup`).
+3. Open the site. The **Welcome to Angles** screen asks for the setup token,
+   the admin name and password (10+ characters) and the **workshop code**
+   (6+ characters).
+4. The empty-catalog guide opens: add holds, angles, drawings, then SAVE.
+5. Give operators the workshop code. Add stations and pair watches in
+   ADMIN → SETTINGS ([`WATCH_SETUP.md`](WATCH_SETUP.md)).
+
+### Upgrading an existing v1.5 install to v2.0
+
+1. **Before deploying**, decide the workshop code. Right after the deploy every
+   operator device sees the *Workshop access* screen; until an admin sets the
+   code (ADMIN → SETTINGS → WORKSHOP CODE, or `SEED_WORKSHOP_CODE` with
+   `npm run db:setup`), only admins can open the catalog.
+2. Connect a **private** Blob store (Vercel → Storage → Blob → access: Private
+   → connect to the project), then redeploy so `BLOB_READ_WRITE_TOKEN` is set.
+3. Deploy. New tables (`settings`, `stations`, `watch_devices`) are created on
+   first use; the old single watch selection becomes station **Saw 1**.
+4. Admin: SETTINGS → set the workshop code → **MOVE IMAGES TO STORAGE** →
+   pair each watch (watches need app **1.2**; older watch builds stop syncing
+   because `/api/watch` now requires a paired token).
+
+### Roll back
+
+Redeploy the previous production deployment in Vercel. The new tables are
+additive and are ignored by v1.5; images moved to storage are references the
+old version does not accept, so roll back **before** moving images, or restore
+the catalog from an EXPORT made before the move.
+
+The shared catalog and change history live in **Neon Postgres** (`users`,
+`app_state`, `change_log`, `settings`, `stations`, `watch_devices`,
+`login_attempts` — see [`api/_lib/schema.sql`](../api/_lib/schema.sql)).
+Covers and drawings live in a **private Vercel Blob** store; an admin EXPORT
+inlines them, so an EXPORT is a complete catalog backup.
 Work-mode progress and theme are device-local and intentionally **not** backed up.
 
 ---

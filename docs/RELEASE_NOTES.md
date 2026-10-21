@@ -3,6 +3,23 @@
 Narrative summary of releases. For the itemized list, see
 [`../CHANGELOG.md`](../CHANGELOG.md).
 
+## v2.0 — the catalog is closed, the workshop is split into stations
+
+The angle catalog is no longer open to anyone with the link. Operators open it
+with a workshop code, admins with their own password, and a brand-new install
+starts with a short first-run screen instead of a seeded user list.
+
+Several sawyers can now work in parallel: every saw or person is a station
+with its own job, every watch is paired to one station with a 6-digit code,
+and cut marks stay on each watch. Two admins editing at once no longer lose
+work either: their saves are merged.
+
+Drawings moved out of the catalog JSON into private storage, so the catalog
+loads faster and pictures are only visible to people with access.
+
+Setup and upgrade steps: [`OPERATIONS.md`](OPERATIONS.md). Watches:
+[`WATCH_SETUP.md`](WATCH_SETUP.md), [`MULTI_OPERATOR.md`](MULTI_OPERATOR.md).
+
 ## Garmin app v1.1 — hands-free rhythm at the saw
 
 Cut, press START, and the watch does the rest: the angle turns green, the

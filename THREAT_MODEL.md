@@ -1,13 +1,14 @@
 # THREAT MODEL — angles-proto
 
-> Method: STRIDE over the current shared-backend architecture. Date: 2026-06-08.
+> Method: STRIDE over the current shared-backend architecture. Updated for v2.0: 2026-10-21.
 
 ---
 
 ## 1. System Description
 
-`angles-proto` is a React/Vite SPA for workshop saw-angle reference. The public
-operator view reads one shared catalog from same-origin Vercel Functions.
+`angles-proto` is a React/Vite SPA for workshop saw-angle reference. Operators
+unlock the shared catalog with a workshop code; Garmin watches read a compact
+copy with a paired token. Everything goes through same-origin Vercel Functions.
 Authenticated admins can save catalog edits, view change history, and receive a
 startup notification when another user changed the database.
 
@@ -20,12 +21,15 @@ Backend functions in `/api` talk to Neon Postgres. Browser code never receives
 
 | ID | Asset | Sensitivity | Where |
 |----|-------|-------------|-------|
-| A1 | Product/angle catalog and images | Low-Medium business data | Neon `app_state.data` |
+| A1 | Product/angle catalog and images | Medium business data (the company's know-how) | Neon `app_state.data`, private Vercel Blob `img/*` |
 | A2 | User password hashes/salts | Medium credential material | Neon `users` |
 | A3 | Session token | Medium | httpOnly `angles_session` cookie |
+| A3b | Workshop access token | Medium (read access) | httpOnly `angles_access` cookie, 30 days, key derived from `SESSION_SECRET`, bound to the code version |
+| A3c | Workshop code hash | Medium | Neon `settings` (scrypt) |
+| A3d | Watch tokens | Medium (read access) | On the watch; SHA-256 in Neon `watch_devices` |
 | A4 | Change history | Low-Medium accountability data | Neon `change_log` |
 | A5 | Device-local work progress/theme/last-seen id | Low | Browser `localStorage` |
-| A6 | Server secrets | High | Vercel env: `DATABASE_URL`, `SESSION_SECRET` |
+| A6 | Server secrets | High | Vercel env: `DATABASE_URL`, `SESSION_SECRET`, `SETUP_TOKEN`, `BLOB_READ_WRITE_TOKEN` |
 | A7 | Source code and build pipeline | Low-Medium | Git / Vercel |
 
 ---
@@ -37,7 +41,11 @@ TB1: Network -> Browser
     Static assets and same-origin API responses over HTTPS.
 
 TB2: Browser -> Vercel Functions (/api)
-    Public reads, login/logout/session, authenticated writes/history.
+    Status/unlock/setup/login are open; catalog, images and stations need a
+    workshop or admin cookie; writes/history/settings need an admin session.
+
+TB2b: Watch -> phone -> Vercel Functions (/api/watch)
+    Bearer token generated on the watch; paired to a station by an admin.
 
 TB3: Vercel Functions -> Neon Postgres
     Server-only database access using DATABASE_URL.
@@ -55,7 +63,9 @@ TB5: Browser -> localStorage
 
 | Actor | Capability | Motivation |
 |-------|------------|------------|
-| Public viewer | Can read catalog and use DevTools | Inspect public data, attempt write APIs |
+| Outsider | Knows the URL, uses DevTools | Read the catalog, claim a fresh deploy, guess codes |
+| Operator | Workshop code cookie | Read the catalog, send jobs to stations |
+| Watch holder | A paired watch token | Read the catalog and that station's job |
 | Named admin | Valid session | Edit catalog, possibly make mistakes |
 | Credential guesser | Repeated login attempts | Obtain admin session |
 | Shared-machine user | Access browser profile | Read device-local work state, reuse non-expired session |
@@ -114,8 +124,10 @@ Admin browser
 
 ### Information Disclosure
 
-- **T-I1 — Public catalog visibility.** `GET /api/state` is public by product
-  decision. **Residual:** Accepted.
+- **T-I1 — Catalog visibility.** Since v2.0 `GET /api/state`, `/api/images`,
+  `/api/watch` need a workshop cookie, admin session or paired watch token.
+  Images are private Blob objects served only after that check. **Residual:**
+  Low; anyone given the workshop code can read until the code is rotated.
 - **T-I2 — History visibility.** `GET /api/history` requires session. **Residual:** Low.
 - **T-I3 — Secret exposure.** Database URL and session secret are server-only env
   vars. **Residual:** depends on Vercel/project secret hygiene.
@@ -138,8 +150,16 @@ Admin browser
 - **T-E1 — Public viewer becomes admin.** Server endpoints enforce session for
   writes/history. Frontend route gating is UX only; backend is authoritative.
   **Residual:** Low, bounded by session/auth robustness.
-- **T-E2 — Admin role separation.** All three named users are equal admins.
+- **T-E2 — Admin role separation.** All named users are equal admins.
   **Residual:** Accepted.
+- **T-E3 — Workshop cookie used as admin.** Different cookie and an HMAC key
+  derived from `SESSION_SECRET` with its own label; tests prove neither token
+  verifies as the other. **Residual:** Low.
+- **T-E4 — Claiming a fresh deploy.** First-run creates a user only while the
+  table is empty (single statement) and needs `SETUP_TOKEN` on Vercel.
+  **Residual:** Low.
+- **T-E5 — Rogue watch.** A watch gets data only after an admin enters its
+  6-digit code; pairing requests are throttled and capped. **Residual:** Low.
 
 ---
 
@@ -147,8 +167,8 @@ Admin browser
 
 1. Login throttling fails open on a throttle-store outage (availability over strictness).
 2. Online-only dependency on Vercel Functions and Neon availability.
-3. Public catalog read is intentional but should remain clearly documented.
-4. No automatic merge/reapply for stale admin edits.
+3. Shared workshop code: rotate it when people leave (signs all devices out).
+4. Admin sessions are not revoked by a password change (12 h TTL; D18).
 5. Historical DB dump exposure was previously remediated, but public Git hosting
    cache/clone residuals should be treated as impossible to fully recall.
 
@@ -159,6 +179,9 @@ Admin browser
 - Unauthenticated `PUT /api/state` -> 401.
 - Stale `PUT /api/state` -> 409 and no write.
 - Unauthenticated `GET /api/history` -> 401.
+- `GET /api/state`, `/api/images`, `/api/watch?a=stations` without access -> 401.
+- `GET /api/watch` without a paired token -> 401 / 403, never the catalog.
+- Old workshop cookie after a code change -> 401.
 - Session cookie is httpOnly, SameSite=Strict, Secure in production.
 - Browser localStorage has no password hash or shared catalog state.
 - CSP/HSTS/frame headers are present from `vercel.json`.

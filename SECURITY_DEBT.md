@@ -1,6 +1,6 @@
 # SECURITY DEBT — angles-proto
 
-> Current backlog for the shared-backend architecture. Date: 2026-06-08.
+> Current backlog for the shared-backend architecture. Updated for v2.0: 2026-10-21.
 
 ---
 
@@ -11,7 +11,7 @@
 | D1 | Client-only admin gate | SEV-CRITICAL | L | Architecture | **DONE** — writes/history require server-verified httpOnly session |
 | D2 | Default `admin`/`admin` bootstrap | SEV-HIGH | S | Auth | **DONE** — removed; named users are server-seeded |
 | D3 | Client-side SHA-256 password hash in `localStorage` | SEV-HIGH | M | Crypto | **DONE** — passwords are server-side scrypt hashes in Neon |
-| D4 | Weak seeded passwords (`password = username`) | SEV-HIGH | S | Auth | **DONE** — explicit env passwords required by default |
+| D4 | Weak seeded passwords (`password = username`) | SEV-HIGH | S | Auth | **DONE** — explicit env passwords by default; v2.0 adds first-run admin creation (10+ chars) and self-service password change |
 | D5 | Distributed login rate limit/lockout | SEV-HIGH | S-M | Anti-abuse | **DONE** — Neon-backed throttle shared across serverless instances |
 | D6 | Security headers / CSP | SEV-MEDIUM | S | Config | **DONE** — `vercel.json` |
 | D7 | JSON import accepts SVG | SEV-MEDIUM | S | Input validation | **DONE** — raster data URL allowlist |
@@ -22,7 +22,12 @@
 | D12 | Global `outline:none` removes focus visibility | SEV-LOW | S | A11y | **DONE** — keyboard `:focus-visible` ring restored |
 | D13 | `printImage` uses `document.write` into iframe | SEV-LOW | S | Hardening | **DONE** — rebuilt via DOM APIs, no `document.write` |
 | D14 | No documented DB backup/restore procedure | SEV-MEDIUM | S | Operations | **DONE** — `docs/OPERATIONS.md` |
-| D15 | `POST /api/watch` (Send to watch) is unauthenticated | SEV-LOW | S | Auth | ACCEPTED — single user; only overwrites the watch hold selection, names validated against catalog, 16 KB body cap. Revisit (require session) if more people use watches |
+| D15 | `POST /api/watch` (Send to watch) is unauthenticated | SEV-LOW | S | Auth | **DONE (v2.0)** — send needs a workshop-code device or admin; the watch reads with a paired token (SHA-256 stored); jobs are per station |
+| D16 | Public catalog read (`GET /api/state`) | SEV-MEDIUM | M | Data exposure | **DONE (v2.0)** — workshop code (derived-key cookie, versioned) or admin session; images in private Blob behind the same check |
+| D17 | First-run takeover of a fresh deploy | SEV-HIGH | S | Auth | **DONE (v2.0)** — single-statement "insert only if no users" + `SETUP_TOKEN` required on Vercel, throttled |
+| D18 | Admin sessions survive a password change | SEV-LOW | M | Auth | OPEN — stateless 12 h HMAC tokens; rotate `SESSION_SECRET` to force sign-out everywhere; planned v2.1 |
+| D19 | Shared workshop code instead of per-operator identity | SEV-LOW | M | Auth | ACCEPTED — read-only + send-to-station rights; rotate on staff change (signs every device out) |
+| D20 | Pairing code is 6 digits | SEV-LOW | S | Auth | ACCEPTED — approve is admin-only and throttled per admin+IP; pairing requests throttled per IP, max 20 pending, 15 min TTL |
 | R1 | DB dumps in git history | SEV-HIGH (was) | — | Data exposure | **RESOLVED** (monitor residual public clones/caches) |
 
 Effort: S <= 1h, M <= half-day, L > 1 day.
@@ -52,8 +57,9 @@ rather than locking everyone out. Errors stay generic (`429 too_many_attempts`)
 with no password enumeration. Logic in `api/_lib/rateLimit.js`, storage in
 `api/_lib/rateLimitStore.js`.
 
-Future improvement: prune expired `login_attempts` rows on a schedule (currently
-they accumulate until a key is reused or cleared).
+Expired `login_attempts` rows are swept on every successful sign-in (v2.0).
+The same throttle protects the workshop code, the first-run setup token,
+watch pairing requests and wrong pairing codes (separate keys).
 
 ### D10 — Dependency / Audit Drift
 
@@ -79,7 +85,8 @@ secret push-protection on `main`.
 
 ## Current Risk Notes
 
-- Public catalog read is an intentional product decision.
+- Since v2.0 the catalog is not public: reads need a workshop-code device, an
+  admin session or a paired watch token.
 - Admin writes, history, and latest-change state are server-authorized.
 - Work progress, work theme, and last-seen change id remain device-local.
 - `DATABASE_URL` and `SESSION_SECRET` must stay server-only and never use a

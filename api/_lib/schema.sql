@@ -56,3 +56,26 @@ CREATE TABLE IF NOT EXISTS settings (
   value      JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Stations (one per saw / operator), each with its own "Send to watch" job,
+-- and the Garmin watches paired to them (only a SHA-256 of the watch token is
+-- stored). Also created lazily by api/_lib/stationStore.js, which moves the
+-- old single watch_selection row into a first station "Saw 1".
+CREATE TABLE IF NOT EXISTS stations (
+  id      SERIAL PRIMARY KEY,
+  name    TEXT NOT NULL UNIQUE,
+  holds   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  sent_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS watch_devices (
+  token_hash   TEXT PRIMARY KEY,
+  station_id   INT REFERENCES stations(id) ON DELETE SET NULL,
+  label        TEXT,
+  pair_code    TEXT,
+  pair_expires TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS watch_devices_pair_code_idx ON watch_devices (pair_code);
