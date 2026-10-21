@@ -8,9 +8,9 @@ const inputStyle = {
     border: `1px solid ${theme.colors.borderMedium}`, background: theme.colors.inputBg, color: theme.colors.textPrimary,
 };
 
-function ago(seconds) {
+function ago(seconds, nowMs) {
     if (!seconds) return "never synced";
-    const min = Math.round((Date.now() / 1000 - seconds) / 60);
+    const min = Math.round((nowMs / 1000 - seconds) / 60);
     if (min < 2) return "synced just now";
     if (min < 120) return `synced ${min} min ago`;
     const h = Math.round(min / 60);
@@ -24,21 +24,22 @@ function ago(seconds) {
 export function AdminStations({ styles }) {
     const [stations, setStations] = useState(null);
     const [openUntil, setOpenUntil] = useState(0);
-    const [, tick] = useState(0);
+    // clock for the countdown and "synced … ago", updated by a timer (not read during render)
+    const [now, setNow] = useState(() => Date.now());
     const [name, setName] = useState("");
     const [pair, setPair] = useState({ code: "", station: "", label: "" });
 
     const refresh = useCallback(() => {
         listStationsAdmin()
-            .then((r) => { setStations(r.stations ?? []); setOpenUntil(r.pairingOpenUntil ?? 0); })
+            .then((r) => { setStations(r.stations ?? []); setOpenUntil(r.pairingOpenUntil ?? 0); setNow(Date.now()); })
             .catch(() => toast.error("Could not load the stations."));
     }, []);
     useEffect(() => { refresh(); }, [refresh]);
     // countdown for the pairing window
-    const open = openUntil > Date.now();
+    const open = openUntil > now;
     useEffect(() => {
         if (!open) return undefined;
-        const t = setInterval(() => tick((n) => n + 1), 1000);
+        const t = setInterval(() => setNow(Date.now()), 1000);
         return () => clearInterval(t);
     }, [open]);
 
@@ -94,7 +95,7 @@ export function AdminStations({ styles }) {
                     {(s.watches ?? []).length === 0 && <div style={{ fontSize: 12, color: theme.colors.textTertiary }}>No watches paired.</div>}
                     {(s.watches ?? []).map((w) => (
                         <div key={w.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 12 }}>
-                            <span style={{ flex: 1, minWidth: 120 }}>⌚ {w.label || w.id.slice(0, 6)} · {ago(w.lastSeen)}</span>
+                            <span style={{ flex: 1, minWidth: 120 }}>⌚ {w.label || w.id.slice(0, 6)} · {ago(w.lastSeen, now)}</span>
                             <select
                                 aria-label="Move watch to station"
                                 value={s.id}
@@ -125,10 +126,10 @@ export function AdminStations({ styles }) {
                     <button
                         type="button"
                         style={styles.btnGhost}
-                        onClick={() => act(async () => { const r = await openPairing(); setOpenUntil(r.until); }, "Pairing is open for 10 minutes")}
+                        onClick={() => act(async () => { const r = await openPairing(); setOpenUntil(r.until); setNow(Date.now()); }, "Pairing is open for 10 minutes")}
                     >
                         {open
-                            ? `PAIRING OPEN · ${Math.floor((openUntil - Date.now()) / 60000)}:${String(Math.floor(((openUntil - Date.now()) % 60000) / 1000)).padStart(2, "0")}`
+                            ? `PAIRING OPEN · ${Math.floor((openUntil - now) / 60000)}:${String(Math.floor(((openUntil - now) % 60000) / 1000)).padStart(2, "0")}`
                             : "OPEN PAIRING (10 MIN)"}
                     </button>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

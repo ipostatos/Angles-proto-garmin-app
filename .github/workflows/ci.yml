@@ -35,6 +35,10 @@ jobs:
 
   secret-scan:
     runs-on: ubuntu-latest
+    # private repo: the default token cannot list PR commits without these
+    permissions:
+      contents: read
+      pull-requests: read
 
     steps:
       - uses: actions/checkout@v4
