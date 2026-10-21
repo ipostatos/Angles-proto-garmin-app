@@ -110,7 +110,7 @@ describe('/api/account/setup', () => {
     });
 
     it('needs the setup token on Vercel', async () => {
-        const env = { VERCEL_ENV: 'production', SETUP_TOKEN: 'tok-123-abcdefghijklmnopqrstuvwxyz' };
+        const env = { VERCEL_ENV: 'production', SETUP_TOKEN: 'test-setup-token-not-a-secret-0000' };
         const settings = memorySettings();
         expect((await call('setup', { body: good, settings, env })).statusCode).toBe(403);
         expect((await call('setup', { body: { ...good, setupToken: env.SETUP_TOKEN }, settings, env })).statusCode).toBe(200);

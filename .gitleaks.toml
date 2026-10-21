@@ -23,4 +23,7 @@ regexes = [
   '''replace-with-a-[a-z-]+''',
   '''postgresql://user:password@host\.neon\.tech''',
   '''long-random-secret''',
+  # fake setup tokens in api/account tests
+  '''tok-123-abcdefghijklmnopqrstuvwxyz''',
+  '''test-setup-token-not-a-secret-0000''',
 ]
