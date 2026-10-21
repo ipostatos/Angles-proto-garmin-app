@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/hero.svg" width="100%" alt="Angles: a saw blade, the app name and four watch screens — open angle, cut (green), next angle, missed (red)">
+  <img src="docs/assets/hero.jpg" width="100%" alt="Angles: your next cut on your wrist. A Garmin watch showing MAIN 44° next to a saw blade in sawdust">
 </p>
 
 <p align="center">
