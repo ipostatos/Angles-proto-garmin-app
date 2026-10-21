@@ -46,9 +46,14 @@ export const neonRateLimitStore = {
         `;
     },
 
-    /** Drop the counter for a key (called after a successful login). */
+    /**
+     * Drop the counter for a key (called after a successful login), and sweep
+     * rows whose window ended more than a day ago so the table cannot grow
+     * without bound (one cheap indexed DELETE on reset_at).
+     */
     async clearFailures(key) {
         const sql = getSql();
         await sql`DELETE FROM login_attempts WHERE key = ${key}`;
+        await sql`DELETE FROM login_attempts WHERE reset_at < now() - interval '1 day'`;
     },
 };
