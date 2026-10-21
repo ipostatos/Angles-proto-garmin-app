@@ -1,8 +1,17 @@
-// Downloads the shared catalog and writes the compact watch copy:
-// [[name, [main angles], [stefan angles]], ...]
-import { writeFileSync } from 'node:fs';
-const url = process.argv[2] || 'https://avacut.vercel.app/api/state';
-const { data } = await (await fetch(url)).json();
+// Writes the bundled offline catalog from an admin EXPORT (JSON backup):
+//   node garmin/tools/build-catalog.mjs path/to/angles-export.json
+// Without it the watch ships with an empty catalog and gets the real one on its
+// first sync after pairing (the catalog API needs a paired watch).
+// Output: [[name, [main angles], [stefan angles]], ...]
+import { readFileSync, writeFileSync } from 'node:fs';
+
+const file = process.argv[2];
+if (!file) {
+    console.error('Usage: node garmin/tools/build-catalog.mjs <export.json>');
+    process.exit(1);
+}
+const raw = JSON.parse(readFileSync(file, 'utf8'));
+const data = raw.data ?? raw;
 const pick = (id, saw) => data.angles
     .filter(a => a.holdId === id && a.saw === saw)
     .map(a => Number(a.value)).sort((x, y) => x - y);

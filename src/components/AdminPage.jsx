@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AdminSettings } from '../features/admin/AdminSettings.jsx';
+import { AdminStations } from '../features/admin/AdminStations.jsx';
 import toast from 'react-hot-toast';
 import { clamp, toAngleLabel } from '../domain/angles.js';
 import { getSortedHoldNames, generateHoldId, migrateAndSanitize } from '../domain/migration.js';
@@ -885,7 +886,9 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
 
                 {adminView === "settings" ? (
                     <Card style={styles.card}>
-                        <AdminSettings styles={styles} />
+                        <AdminSettings styles={styles}>
+                            <AdminStations styles={styles} />
+                        </AdminSettings>
                     </Card>
                 ) : adminView === "history" ? (
                     <Card style={styles.card}>

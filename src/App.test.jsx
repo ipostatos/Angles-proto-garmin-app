@@ -403,3 +403,27 @@ describe('Access gate (v2.0)', () => {
         await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith('/api/account/setup', expect.anything()));
     });
 });
+
+describe('Send to watch picks a station (v2.0)', () => {
+    it('sends the selected holds to the chosen station', async () => {
+        const base = makeApiRouter();
+        const sent = [];
+        globalThis.fetch = vi.fn((url, init = {}) => {
+            if (url === '/api/watch?a=stations') {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ stations: [{ id: 1, name: 'Saw 1', sentAt: 0, count: 0 }, { id: 2, name: 'Saw 2', sentAt: 0, count: 3 }] }) });
+            }
+            if (url === '/api/watch?a=send') {
+                sent.push(JSON.parse(init.body));
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, count: 1, t: 1 }) });
+            }
+            return base(url, init);
+        });
+        render(<App />);
+        await waitFor(() => expect(screen.getByText('Austin')).toBeTruthy());
+        fireEvent.click(screen.getByText('Austin'));
+        fireEvent.click(screen.getByRole('button', { name: 'Send to watch' }));
+        await waitFor(() => expect(screen.getByText('Saw 2')).toBeTruthy());
+        fireEvent.click(screen.getByText('Saw 2'));
+        await waitFor(() => expect(sent).toEqual([{ station: 2, holds: ['Austin'] }]));
+    });
+});

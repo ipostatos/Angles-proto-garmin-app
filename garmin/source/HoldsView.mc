@@ -23,7 +23,7 @@ class HoldsView extends ScrollList {
         _catalog = catalog;
         var p = Storage.getValue("picked");
         _picked = p instanceof Array ? p : [];
-        _subs = [null, null, "clear cut marks", "untick all holds", "get holds sent from site", "version " + APP_VERSION];
+        _subs = [null, null, "clear cut marks", "untick all holds", syncStatus(), "version " + APP_VERSION];
     }
 
     function onShow() as Void {
@@ -95,6 +95,13 @@ class HoldsView extends ScrollList {
             return;
         }
         if (index == A_SYNC) {
+            var paired = Storage.getValue("station") instanceof String;
+            if (!paired) {
+                // not paired yet (or waiting): show the code screen, which pairs and polls
+                var pv = new PairView();
+                WatchUi.pushView(pv, new PairDelegate(pv), WatchUi.SLIDE_LEFT);
+                return;
+            }
             setSyncStatus("loading...");
             syncFromPhone();
             return;

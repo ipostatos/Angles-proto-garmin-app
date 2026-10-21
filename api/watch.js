@@ -1,13 +1,34 @@
-// GET  /api/watch → compact public catalog + last selection sent from the web,
-//                   for the Garmin watch app (Connect IQ responses must stay small).
-//      { r: revision, h: [[holdName, [main], [stefan]], ...], s: [holdName], t: sentAt (unix seconds, fits a watch Number) }
-// POST /api/watch { holds: [holdName] } → "Send to watch" button on the main page.
+// Garmin watch + stations, one function:
+//
+// Watch (header `Authorization: Bearer <token>`, token generated on the watch):
+//   GET  /api/watch            → 200 { r, h, s, t, n }  catalog + its station's selection
+//                                401 { e: 'unpaired' } | 403 { e: 'pending', c: code }
+//   POST /api/watch?a=pair     → { c: code } six digits for the admin, valid 15 min
+//
+// Web (admin session or workshop-code device):
+//   GET  /api/watch?a=stations → { stations: [{ id, name, sentAt, count, watches? }] } (watches: admin only)
+//   POST /api/watch?a=send     { station, holds } → "Send to watch" for one station
+//
+// Admin only:
+//   POST /api/watch?a=station  { name } create · { id, delete: true } delete
+//   POST /api/watch?a=approve  { code, station, label } pair the watch that shows `code`
+//   POST /api/watch?a=move     { watch, station } move a watch · { watch, station: null } unpair
+//
+// Response field names stay short: Connect IQ responses must stay small.
+import crypto from 'node:crypto';
 import { getState } from './_lib/stateService.js';
 import { neonStore } from './_lib/stateStore.js';
-import { getSql } from './_lib/db.js';
-import { PayloadTooLargeError, readJsonBody } from './_lib/http.js';
+import { neonStationStore } from './_lib/stationStore.js';
+import { neonSettingsStore } from './_lib/settingsStore.js';
+import { neonRateLimitStore } from './_lib/rateLimitStore.js';
+import { isRateLimited, rateLimitKey, recordFailure } from './_lib/rateLimit.js';
+import { canRead, resolveReader } from './_lib/access.js';
+import { getClientIp, PayloadTooLargeError, readJsonBody } from './_lib/http.js';
 
 export const MAX_SENT_HOLDS = 200;
+export const PAIR_TTL_MS = 15 * 60 * 1000;
+export const MAX_PENDING_PAIRS = 20;
+const MAX_NAME = 40;
 
 export function toWatchCatalog(data) {
     const holds = Array.isArray(data?.holds) ? data.holds : [];
@@ -21,68 +42,178 @@ export function toWatchCatalog(data) {
         .sort((a, b) => a[0].localeCompare(b[0], undefined, { sensitivity: 'base' }));
 }
 
-/** Single-row slot for the selection, created on first use. */
-export const neonWatchStore = {
-    async ensure() {
-        const sql = getSql();
-        await sql`
-            CREATE TABLE IF NOT EXISTS watch_selection (
-                id      INT PRIMARY KEY DEFAULT 1,
-                holds   JSONB NOT NULL,
-                sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                CONSTRAINT watch_selection_single_row CHECK (id = 1)
-            )
-        `;
-    },
-    async read() {
-        await this.ensure();
-        const rows = await getSql()`SELECT holds, sent_at FROM watch_selection WHERE id = 1`;
-        if (!rows[0]) return null;
-        return { holds: rows[0].holds, sentAt: Math.floor(new Date(rows[0].sent_at).getTime() / 1000) };
-    },
-    async write(holds) {
-        await this.ensure();
-        const rows = await getSql()`
-            INSERT INTO watch_selection (id, holds, sent_at)
-            VALUES (1, ${JSON.stringify(holds)}::jsonb, now())
-            ON CONFLICT (id) DO UPDATE SET holds = EXCLUDED.holds, sent_at = EXCLUDED.sent_at
-            RETURNING sent_at
-        `;
-        return Math.floor(new Date(rows[0].sent_at).getTime() / 1000);
-    },
-};
+/** Bearer token from the watch: 32..128 hex/base64url characters. */
+export function watchTokenHash(req) {
+    const auth = req.headers?.authorization;
+    const m = typeof auth === 'string' ? auth.match(/^Bearer ([A-Za-z0-9_-]{32,128})$/) : null;
+    return m ? crypto.createHash('sha256').update(m[1]).digest('hex') : null;
+}
 
-/** Testable handler: stores are injected so it can run without a DB. */
-export async function handleWatch(req, res, stateStore, watchStore) {
+export function newPairCode() {
+    return String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
+const cleanName = (v) => (typeof v === 'string' ? v.trim().slice(0, MAX_NAME) : '');
+const asId = (v) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null);
+
+async function watchRead(req, res, d) {
+    const tokenHash = watchTokenHash(req);
+    const device = tokenHash ? await d.stations.findDevice(tokenHash) : null;
+    if (!device) {
+        res.status(401).json({ e: 'unpaired' });
+        return;
+    }
+    if (device.stationId == null) {
+        const live = device.pairExpires > d.now;
+        res.status(403).json({ e: 'pending', c: live ? device.pairCode : null });
+        return;
+    }
+    const { data, revision } = await getState(d.state);
+    await d.stations.touchDevice(tokenHash);
+    res.status(200).json({
+        r: revision,
+        h: toWatchCatalog(data),
+        s: device.holds,
+        t: device.sentAt,
+        n: device.stationName,
+    });
+}
+
+async function watchPair(req, res, d) {
+    const tokenHash = watchTokenHash(req);
+    if (!tokenHash) {
+        res.status(400).json({ e: 'token' });
+        return;
+    }
+    // Every pairing request counts against the IP, so the table cannot be flooded.
+    const key = rateLimitKey(getClientIp(req), 'watch-pair');
+    if (await isRateLimited(d.rate, key, d.now, { maxFailures: 10 })) {
+        res.status(429).json({ e: 'slow_down' });
+        return;
+    }
+    await recordFailure(d.rate, key, d.now, { windowMs: PAIR_TTL_MS });
+    if ((await d.stations.countPending()) >= MAX_PENDING_PAIRS) {
+        res.status(429).json({ e: 'busy' });
+        return;
+    }
+    const code = newPairCode();
+    const { alreadyPaired } = await d.stations.startPairing(tokenHash, code, d.now + PAIR_TTL_MS);
+    res.status(200).json(alreadyPaired ? { ok: true } : { c: code });
+}
+
+async function webAction(req, res, d, action) {
+    const reader = await resolveReader(req.headers?.cookie, d.settings);
+    if (!canRead(reader)) {
+        res.status(401).json({ error: 'locked' });
+        return;
+    }
+    const admin = reader.username;
+
+    if (action === 'stations' && req.method === 'GET') {
+        const list = await d.stations.listStations();
+        res.status(200).json({
+            stations: list.map((s) => ({
+                id: s.id, name: s.name, sentAt: s.sentAt, count: s.holds.length,
+                ...(admin ? { watches: s.watches } : {}),
+            })),
+        });
+        return;
+    }
+    if (req.method !== 'POST') {
+        res.status(405).json({ error: 'Method not allowed' });
+        return;
+    }
+    const body = await readJsonBody(req, { maxBytes: 16 * 1024 });
+
+    if (action === 'send') {
+        const station = asId(body?.station);
+        const sent = body?.holds;
+        if (!station || !Array.isArray(sent) || sent.length > MAX_SENT_HOLDS) {
+            res.status(400).json({ error: 'invalid_body' });
+            return;
+        }
+        // Keep only names that exist in the catalog.
+        const { data } = await getState(d.state);
+        const known = new Set((data?.holds ?? []).map(h => h.name));
+        const holds = [...new Set(sent.filter(n => typeof n === 'string' && known.has(n)))];
+        const t = await d.stations.sendToStation(station, holds);
+        if (t == null) {
+            res.status(404).json({ error: 'no_station' });
+            return;
+        }
+        res.status(200).json({ ok: true, count: holds.length, t });
+        return;
+    }
+
+    if (!admin) {
+        res.status(403).json({ error: 'admin_only' });
+        return;
+    }
+    if (action === 'station') {
+        if (body?.delete) {
+            const ok = asId(body.id) && await d.stations.deleteStation(asId(body.id));
+            res.status(ok ? 200 : 404).json(ok ? { ok: true } : { error: 'no_station' });
+            return;
+        }
+        const name = cleanName(body?.name);
+        if (!name) {
+            res.status(400).json({ error: 'invalid_body', message: 'Enter a station name.' });
+            return;
+        }
+        const created = await d.stations.createStation(name);
+        res.status(created ? 200 : 409).json(created ?? { error: 'exists', message: 'A station with this name already exists.' });
+        return;
+    }
+    if (action === 'approve') {
+        const code = typeof body?.code === 'string' ? body.code.replace(/\s/g, '') : '';
+        const station = asId(body?.station);
+        if (!/^\d{6}$/.test(code) || !station) {
+            res.status(400).json({ error: 'invalid_body', message: 'Enter the 6-digit code shown on the watch.' });
+            return;
+        }
+        // Six digits are guessable at scale, so wrong codes are throttled like logins.
+        const key = rateLimitKey(getClientIp(req), `approve:${admin}`);
+        if (await isRateLimited(d.rate, key, d.now)) {
+            res.status(429).json({ error: 'too_many_attempts' });
+            return;
+        }
+        const ok = await d.stations.approvePairing(code, station, cleanName(body?.label) || null);
+        if (!ok) {
+            await recordFailure(d.rate, key, d.now);
+            res.status(404).json({ error: 'no_code', message: 'No watch is waiting with this code. Start pairing on the watch again.' });
+            return;
+        }
+        res.status(200).json({ ok: true });
+        return;
+    }
+    if (action === 'move') {
+        const watch = typeof body?.watch === 'string' && /^[0-9a-f]{16}$/.test(body.watch) ? body.watch : null;
+        const station = body?.station === null ? null : asId(body?.station);
+        if (!watch || (body?.station !== null && !station)) {
+            res.status(400).json({ error: 'invalid_body' });
+            return;
+        }
+        const ok = await d.stations.moveWatch(watch, station);
+        res.status(ok ? 200 : 404).json(ok ? { ok: true } : { error: 'no_watch' });
+        return;
+    }
+    res.status(404).json({ error: 'not_found' });
+}
+
+/** Testable handler: stores and clock are injected so it can run without a DB. */
+export async function handleWatch(req, res, opts = {}) {
+    const d = {
+        state: opts.stateStore ?? neonStore,
+        stations: opts.stationStore ?? neonStationStore,
+        settings: opts.settingsStore ?? neonSettingsStore,
+        rate: opts.rateStore ?? neonRateLimitStore,
+        now: opts.now ?? Date.now(),
+    };
+    const action = req.query?.a;
     try {
-        if (req.method === 'GET') {
-            const { data, revision } = await getState(stateStore);
-            const sel = await watchStore.read();
-            res.status(200).json({
-                r: revision,
-                h: toWatchCatalog(data),
-                s: sel?.holds ?? [],
-                t: sel?.sentAt ?? 0,
-            });
-            return;
-        }
-
-        if (req.method === 'POST') {
-            const body = await readJsonBody(req, { maxBytes: 16 * 1024 });
-            const sent = body?.holds;
-            if (!Array.isArray(sent) || sent.length > MAX_SENT_HOLDS) {
-                res.status(400).json({ error: 'invalid_body' });
-                return;
-            }
-            // Keep only names that exist in the catalog.
-            const { data } = await getState(stateStore);
-            const known = new Set((data?.holds ?? []).map(h => h.name));
-            const holds = [...new Set(sent.filter(n => typeof n === 'string' && known.has(n)))];
-            const sentAt = await watchStore.write(holds);
-            res.status(200).json({ ok: true, count: holds.length, t: sentAt });
-            return;
-        }
-
+        if (!action && req.method === 'GET') return await watchRead(req, res, d);
+        if (action === 'pair' && req.method === 'POST') return await watchPair(req, res, d);
+        if (action) return await webAction(req, res, d, action);
         res.status(405).json({ error: 'Method not allowed' });
     } catch (err) {
         if (err instanceof PayloadTooLargeError) {
@@ -95,5 +226,5 @@ export async function handleWatch(req, res, stateStore, watchStore) {
 }
 
 export default function handler(req, res) {
-    return handleWatch(req, res, neonStore, neonWatchStore);
+    return handleWatch(req, res);
 }
