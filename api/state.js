@@ -1,16 +1,23 @@
-// GET  /api/state  → public read of the shared catalog { data, revision }
+// GET  /api/state  → read of the shared catalog { data, revision } for an admin
+//                    session or a workshop-code device; 401 { error: 'locked' } otherwise
 // PUT  /api/state  → authenticated write with revision optimistic locking
 import { getState, putState } from './_lib/stateService.js';
 import { neonStore } from './_lib/stateStore.js';
+import { neonSettingsStore } from './_lib/settingsStore.js';
+import { canRead, resolveReader } from './_lib/access.js';
 import { getSessionUser } from './_lib/session.js';
 import { PayloadTooLargeError, readJsonBody } from './_lib/http.js';
 
 export const STATE_BODY_LIMIT_BYTES = 5 * 1024 * 1024;
 
 /** Testable handler: store is injected so it can be exercised without a DB. */
-export async function handleState(req, res, store) {
+export async function handleState(req, res, store, settingsStore = neonSettingsStore) {
     try {
         if (req.method === 'GET') {
+            if (!canRead(await resolveReader(req.headers?.cookie, settingsStore))) {
+                res.status(401).json({ error: 'locked' });
+                return;
+            }
             const result = await getState(store);
             res.status(200).json(result);
             return;

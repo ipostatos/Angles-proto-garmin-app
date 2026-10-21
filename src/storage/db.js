@@ -51,7 +51,9 @@ export async function loadState() {
         throw new Error('Failed to reach /api/state', { cause: err });
     }
     if (!res.ok) {
-        throw new Error(`/api/state responded with status ${res.status}`);
+        const err = new Error(`/api/state responded with status ${res.status}`);
+        err.status = res.status;
+        throw err;
     }
     let body;
     try {

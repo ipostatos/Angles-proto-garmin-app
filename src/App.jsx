@@ -16,6 +16,8 @@ import { AngleTableCard } from './features/operator/AngleTableCard.jsx';
 import { DrawingViewerCard } from './features/operator/DrawingViewerCard.jsx';
 import { PrintTableSection, PRINT_MAX_COLUMNS_ALL, PRINT_MAX_COLUMNS_SINGLE } from './components/PrintSheet.jsx';
 import { WorkModeOverlay } from './components/WorkModeOverlay.jsx';
+import { AccessGate } from './features/access/AccessGate.jsx';
+import { OnboardingModal } from './features/access/OnboardingModal.jsx';
 import { AdminPage, formatLastModified } from './components/AdminPage.jsx';
 import { theme, getStyles } from './styles/theme.js';
 
@@ -46,8 +48,10 @@ export default function App() {
     const [data, setData] = useState(() => ({ version: 2, holds: [], angles: [] }));
     // Server revision used by AdminPage SAVE for optimistic locking.
     const [serverRevision, setServerRevision] = useState(null);
-    // "loading" → "ready" | "error"
+    // "loading" → "ready" | "error" | "locked" (no admin session / workshop code)
     const [loadStatus, setLoadStatus] = useState("loading");
+    // First-run onboarding ("add holds, angles, drawings"), shown once to an admin with an empty catalog.
+    const [showOnboarding, setShowOnboarding] = useState(false);
     const [selectedHolds, setSelectedHolds] = useState(() => new Set());
     const [activeAngleId, setActiveAngleId] = useState(null);
     const [checkedAngles, setCheckedAngles] = useState(() => new Set());
@@ -228,12 +232,36 @@ export default function App() {
                 setLoadStatus("ready");
             })
             .catch((err) => {
+                if (err?.status === 401) {
+                    setLoadStatus("locked");
+                    return;
+                }
                 console.warn("Failed to load catalog from /api/state:", err);
                 setLoadStatus("error");
             });
     }, []);
 
+    // Unlocked by the workshop code, an admin sign-in or the first-run setup.
+    const handleUnlocked = useCallback(({ username, firstRun }) => {
+        if (username) {
+            setCurrentUser(username);
+            setLatestChange(null);
+        }
+        if (firstRun) window.location.hash = "#/admin";
+        loadCatalog();
+    }, [loadCatalog]);
+
     useEffect(() => { loadCatalog(); }, [loadCatalog]);
+
+    // An admin opening an empty catalog (first run, or a fresh fork) gets the
+    // "add holds, angles and drawings" guide once per browser session.
+    const onboardingShownRef = useRef(false);
+    useEffect(() => {
+        if (onboardingShownRef.current || loadStatus !== "ready" || !currentUser) return;
+        if ((data.holds || []).length > 0) return;
+        onboardingShownRef.current = true;
+        setShowOnboarding(true);
+    }, [loadStatus, currentUser, data.holds]);
 
     // Surface a one-time warning if stored data was unreadable and we recovered.
     useEffect(() => {
@@ -497,6 +525,10 @@ export default function App() {
         );
     }
 
+    if (loadStatus === "locked") {
+        return <AccessGate onUnlocked={handleUnlocked} />;
+    }
+
     if (loadStatus === "error") {
         return (
             <div style={styles.page} className="app-page">
@@ -513,6 +545,10 @@ export default function App() {
 
     if (route === "/admin" && currentUser) {
         return (
+            <>
+            {showOnboarding && (
+                <OnboardingModal onClose={() => setShowOnboarding(false)} />
+            )}
             <AdminPage
                 data={data}
                 setData={setData}
@@ -532,6 +568,7 @@ export default function App() {
                 }}
                 lastModifiedMs={lastModifiedMs}
             />
+            </>
         );
     }
 
@@ -1442,6 +1479,9 @@ export default function App() {
             )}
 
             {/* Admin login modal (over the page, no navigation) */}
+            {showOnboarding && (
+                <OnboardingModal onClose={() => setShowOnboarding(false)} />
+            )}
             {showLogin && (
                 <div
                     style={{

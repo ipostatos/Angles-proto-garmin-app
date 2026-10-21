@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { AdminSettings } from '../features/admin/AdminSettings.jsx';
 import toast from 'react-hot-toast';
 import { clamp, toAngleLabel } from '../domain/angles.js';
 import { getSortedHoldNames, generateHoldId, migrateAndSanitize } from '../domain/migration.js';
@@ -48,6 +49,8 @@ function formatHistoryAction(row) {
         angle_added: "Angle added",
         angle_changed: "Angle changed",
         angle_deleted: "Angle deleted",
+        password_changed: "Password changed",
+        workshop_code_changed: "Workshop code changed",
     };
     return labels[action] || action || "Change";
 }
@@ -756,7 +759,7 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
       `}</style>
 
             <div className="adminSearchFade" style={{ display: "none" }} />
-            <div style={styles.adminGrid} className={`admin-grid-container${adminView === "history" ? " history-mode" : ""}`}>
+            <div style={styles.adminGrid} className={`admin-grid-container${adminView !== "catalog" ? " history-mode" : ""}`}>
                 {/* Left: holds list */}
                 <Card style={styles.card}>
                     <div style={styles.cardBody} className="holdsCardBody">
@@ -821,6 +824,13 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
                                 >
                                     HISTORY
                                 </button>
+                                <button
+                                    type="button"
+                                    style={{ ...styles.btnGhost, flex: 1, fontWeight: adminView === "settings" ? 700 : 400 }}
+                                    onClick={() => setAdminView("settings")}
+                                >
+                                    SETTINGS
+                                </button>
                             </div>
 
                             <div style={{ ...styles.footerRow, borderTop: "none", marginTop: 0, paddingTop: 0 }}>
@@ -873,7 +883,11 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
                     </div>
                 </Card>
 
-                {adminView === "history" ? (
+                {adminView === "settings" ? (
+                    <Card style={styles.card}>
+                        <AdminSettings styles={styles} />
+                    </Card>
+                ) : adminView === "history" ? (
                     <Card style={styles.card}>
                         <div style={styles.tableBody}>
                             <div style={{ ...styles.tableHeader, justifyContent: "space-between", marginBottom: 12 }}>

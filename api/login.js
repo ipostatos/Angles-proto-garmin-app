@@ -2,7 +2,7 @@
 import { getUserByUsername } from './_lib/db.js';
 import { authenticateUser, normalizeLoginUsername } from './_lib/auth.js';
 import { signSession, buildSessionCookie } from './_lib/session.js';
-import { PayloadTooLargeError, readJsonBody } from './_lib/http.js';
+import { PayloadTooLargeError, getClientIp, readJsonBody } from './_lib/http.js';
 import { neonRateLimitStore } from './_lib/rateLimitStore.js';
 import {
     isRateLimited,
@@ -14,12 +14,6 @@ import {
 
 export const LOGIN_BODY_LIMIT_BYTES = 16 * 1024;
 export { LOGIN_MAX_FAILURES };
-
-function getClientIp(req) {
-    const forwarded = req.headers?.['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.trim()) return forwarded.split(',')[0].trim();
-    return req.headers?.['x-real-ip'] || req.socket?.remoteAddress || 'unknown';
-}
 
 export async function handleLogin(req, res, opts = {}) {
     if (req.method !== 'POST') {

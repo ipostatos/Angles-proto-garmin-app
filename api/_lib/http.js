@@ -46,3 +46,17 @@ export async function readJsonBody(req, opts = {}) {
         req.on('error', () => resolve({}));
     });
 }
+
+/**
+ * Client IP for throttling. On Vercel the platform sets these headers itself
+ * (a client-sent X-Forwarded-For is not passed through), so the Vercel-specific
+ * header wins; plain XFF is only a fallback for other hosts.
+ */
+export function getClientIp(req) {
+    const h = req.headers ?? {};
+    for (const name of ['x-vercel-forwarded-for', 'x-real-ip', 'x-forwarded-for']) {
+        const v = h[name];
+        if (typeof v === 'string' && v.trim()) return v.split(',')[0].trim();
+    }
+    return req.socket?.remoteAddress || 'unknown';
+}

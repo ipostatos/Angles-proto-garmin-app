@@ -47,3 +47,12 @@ CREATE TABLE IF NOT EXISTS watch_selection (
   sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT watch_selection_single_row CHECK (id = 1)
 );
+
+-- Key/value settings. `workshop_code` = { hash, salt, version } for operator
+-- access; bumping `version` signs every operator device out.
+-- Also created lazily by api/_lib/settingsStore.js.
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

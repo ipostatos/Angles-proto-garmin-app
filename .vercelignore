@@ -1,0 +1,2 @@
+# Tests live next to the API handlers; they must not become serverless functions.
+api/**/*.test.js

@@ -42,6 +42,19 @@ async function main() {
         if (rows.length > 0) seeded += 1;
     }
     console.log(`Seeded ${seeded} new user(s); ${seedUsers.length - seeded} already existed.`);
+
+    // Optional: initial workshop code for operators (admins can change it in SETTINGS).
+    const workshopCode = process.env.SEED_WORKSHOP_CODE;
+    if (workshopCode && workshopCode.trim().length >= 6) {
+        const { hash, salt } = hashPassword(workshopCode.trim());
+        const rows = await sql`
+            INSERT INTO settings (key, value)
+            VALUES ('workshop_code', jsonb_build_object('hash', ${hash}::text, 'salt', ${salt}::text, 'version', 1))
+            ON CONFLICT (key) DO NOTHING
+            RETURNING key
+        `;
+        console.log(rows.length ? 'Workshop code set.' : 'Workshop code already set; left unchanged.');
+    }
     console.log('DB setup complete.');
 }
 

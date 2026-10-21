@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { handleState } from './state.js';
 import { buildSessionCookie, signSession } from './_lib/session.js';
+import { ACCESS_COOKIE, signAccess } from './_lib/access.js';
+import { hashPassword } from './_lib/password.js';
+
+const SECRET = 'state-route-test-secret';
+const code = hashPassword('workshop-123');
+const settingsV2 = { async getWorkshopCode() { return { ...code, version: 2 }; } };
+const okStore = { async readState() { return { data: { version: 2, holds: [], angles: [] }, revision: 4 }; } };
 
 function mockRes() {
     return {
@@ -19,6 +26,41 @@ const explodingStore = {
     initState() { throw new Error('store should not be touched'); },
     commitWrite() { throw new Error('store should not be touched'); },
 };
+
+describe('/api/state read access', () => {
+    it('locks GET without admin session or workshop token', async () => {
+        process.env.SESSION_SECRET = SECRET;
+        const res = mockRes();
+        await handleState({ method: 'GET', headers: {} }, res, explodingStore, settingsV2);
+        expect(res.statusCode).toBe(401);
+        expect(res.body.error).toBe('locked');
+    });
+
+    it('serves GET to a device with a current workshop token', async () => {
+        process.env.SESSION_SECRET = SECRET;
+        const res = mockRes();
+        const cookie = `${ACCESS_COOKIE}=${signAccess(2, { secret: SECRET })}`;
+        await handleState({ method: 'GET', headers: { cookie } }, res, okStore, settingsV2);
+        expect(res.statusCode).toBe(200);
+        expect(res.body.revision).toBe(4);
+    });
+
+    it('locks GET when the workshop code was changed since the token was issued', async () => {
+        process.env.SESSION_SECRET = SECRET;
+        const res = mockRes();
+        const cookie = `${ACCESS_COOKIE}=${signAccess(1, { secret: SECRET })}`;
+        await handleState({ method: 'GET', headers: { cookie } }, res, explodingStore, settingsV2);
+        expect(res.statusCode).toBe(401);
+    });
+
+    it('serves GET to an admin session', async () => {
+        process.env.SESSION_SECRET = SECRET;
+        const res = mockRes();
+        const cookie = buildSessionCookie(signSession('Tomek', { secret: SECRET }), { secure: false });
+        await handleState({ method: 'GET', headers: { cookie } }, res, okStore, settingsV2);
+        expect(res.statusCode).toBe(200);
+    });
+});
 
 describe('/api/state route guards', () => {
     it('rejects an unauthenticated PUT with 401', async () => {

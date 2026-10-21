@@ -341,3 +341,65 @@ describe('App latest-change startup modal (Phase 4)', () => {
         expect(screen.queryByText(/changed the catalog/i)).toBeNull();
     });
 });
+
+describe('Access gate (v2.0)', () => {
+    function lockedRouter({ needsSetup = false, unlockOk = true } = {}) {
+        let unlocked = false;
+        return vi.fn((url, init = {}) => {
+            const method = init.method || 'GET';
+            const json = (body, ok = true, status = 200) =>
+                Promise.resolve({ ok, status, json: () => Promise.resolve(body) });
+            if (url === '/api/session') return json({ username: null, latestChange: null });
+            if (url === '/api/state' && method === 'GET') return unlocked ? json(sampleBody) : json({ error: 'locked' }, false, 401);
+            if (url === '/api/account/status') return json({ needsSetup, setupTokenRequired: false, hasWorkshopCode: !needsSetup, username: null, workshop: false });
+            if (url === '/api/account/unlock') {
+                if (!unlockOk) return json({ error: 'invalid_code', message: 'Wrong workshop code.' }, false, 401);
+                unlocked = true;
+                return json({ ok: true });
+            }
+            if (url === '/api/account/setup') {
+                unlocked = true;
+                return json({ username: JSON.parse(init.body).username });
+            }
+            return Promise.reject(new Error(`unexpected fetch: ${method} ${url}`));
+        });
+    }
+
+    it('asks for the workshop code instead of showing the catalog', async () => {
+        globalThis.fetch = lockedRouter();
+        render(<App />);
+        await waitFor(() => expect(screen.getByText('Workshop access')).toBeTruthy());
+        expect(screen.queryByText('Austin')).toBeNull();
+    });
+
+    it('opens the catalog after the right code', async () => {
+        globalThis.fetch = lockedRouter();
+        render(<App />);
+        await waitFor(() => expect(screen.getByLabelText('Workshop code')).toBeTruthy());
+        fireEvent.change(screen.getByLabelText('Workshop code'), { target: { value: 'saw-2026' } });
+        fireEvent.click(screen.getByRole('button', { name: 'OPEN' }));
+        await waitFor(() => expect(screen.getByText('Austin')).toBeTruthy());
+    });
+
+    it('shows the error for a wrong code and stays locked', async () => {
+        globalThis.fetch = lockedRouter({ unlockOk: false });
+        render(<App />);
+        await waitFor(() => expect(screen.getByLabelText('Workshop code')).toBeTruthy());
+        fireEvent.change(screen.getByLabelText('Workshop code'), { target: { value: 'nope-nope' } });
+        fireEvent.click(screen.getByRole('button', { name: 'OPEN' }));
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/wrong workshop code/i));
+        expect(screen.queryByText('Austin')).toBeNull();
+    });
+
+    it('first run offers to create the admin', async () => {
+        globalThis.fetch = lockedRouter({ needsSetup: true });
+        render(<App />);
+        await waitFor(() => expect(screen.getByText('Welcome to Angles')).toBeTruthy());
+        fireEvent.change(screen.getByLabelText('Admin name'), { target: { value: 'Owner' } });
+        fireEvent.change(screen.getByLabelText(/^Admin password/), { target: { value: 'long-password-1' } });
+        fireEvent.change(screen.getByLabelText('Repeat password'), { target: { value: 'long-password-1' } });
+        fireEvent.change(screen.getByLabelText(/^Workshop code/), { target: { value: 'saw-2026' } });
+        fireEvent.click(screen.getByRole('button', { name: 'CREATE ADMIN' }));
+        await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith('/api/account/setup', expect.anything()));
+    });
+});
