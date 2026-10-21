@@ -1,6 +1,7 @@
 // GET /api/history -> authenticated newest-first change log
 import { neonStore } from './_lib/stateStore.js';
-import { getSessionUser } from './_lib/session.js';
+import { getAdminUser } from './_lib/session.js';
+import { getUserByUsername } from './_lib/db.js';
 
 function parseLimit(value) {
     const n = Number(value);
@@ -9,14 +10,14 @@ function parseLimit(value) {
 }
 
 /** Testable handler: store is injected so route guards can run without a DB. */
-export async function handleHistory(req, res, store) {
+export async function handleHistory(req, res, store, opts = {}) {
     try {
         if (req.method !== 'GET') {
             res.status(405).json({ error: 'Method not allowed' });
             return;
         }
 
-        const username = getSessionUser(req.headers?.cookie);
+        const username = await getAdminUser(req.headers?.cookie, opts.lookupUser ?? getUserByUsername);
         if (!username) {
             res.status(401).json({ error: 'unauthorized' });
             return;

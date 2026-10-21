@@ -246,7 +246,8 @@ Known limitations:
 - The catalog, images, stations and the watch API need a workshop-code device, an admin session, or a paired watch token. The workshop cookie is signed with a key derived from `SESSION_SECRET` and cannot be used as an admin session.
 - Workshop code guesses, setup token guesses, pairing requests and wrong pairing codes are throttled like logins.
 - The first-run screen requires `SETUP_TOKEN` on Vercel, so a fresh deploy cannot be claimed by someone else.
-- Admin sessions are stateless 12-hour tokens: a password change does not end sessions that are already open (v2.1).
+- Admin sessions (12 h) carry a fingerprint of the password hash: changing the password signs out every other device. Changing the workshop code asks for the admin's password.
+- IPv6 clients are throttled per /64; wrong workshop codes are also capped globally.
 - Secrets stay server-side only (`DATABASE_URL`, `SESSION_SECRET`).
 
 Current docs: [`THREAT_MODEL.md`](THREAT_MODEL.md), [`SECURITY_DEBT.md`](SECURITY_DEBT.md), [`SECURITY_CHECKLIST.md`](SECURITY_CHECKLIST.md).
@@ -263,8 +264,8 @@ Full detail in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 - **v2.0 — current.** Workshop access code, first-run setup, password change,
   stations and watch pairing, private image storage, stale-save merge.
-- **v2.1 — next.** Branch protection on the public repo, revoking admin
-  sessions on password change, live watch status.
+- **v2.1 — next.** Branch protection on the public repo, live watch status,
+  optional per-operator accounts.
 
 ---
 

@@ -24,8 +24,9 @@ and keep it in sync. For several operators and several watches see
    └────────────────────── compact JSON (~3.5 KB, no images) ◀──────────────┘
 ```
 
-1. On first start the watch makes a random **token** (32 hex characters) and
-   keeps it in its own storage. The server only stores a SHA-256 of it.
+1. When pairing starts, the server gives the watch a random **token**
+   (32 characters) together with the code. The watch keeps the token in its own
+   storage; the server only stores a SHA-256 of it.
 2. Every request carries `Authorization: Bearer <token>`. An unknown token gets
    nothing: no catalog, no hold names.
 3. **Pairing** ties the token to a **station** (a saw or an operator). An admin
@@ -108,7 +109,9 @@ wrong, expired, or the watch was already paired.
 ## Privacy and security notes
 
 - The watch never receives drawings or pictures, only hold names and angles.
-- The token is created on the watch and is never shown; the server keeps only
-  its hash. Unpairing deletes it on the server.
-- Pairing requests are limited per network and in total, and wrong codes on
-  the admin side are throttled, so codes cannot be guessed in bulk.
+- The token is made by the server with a cryptographic random generator, is
+  never shown, and the server keeps only its hash. Unpairing deletes it on the
+  server and the watch forgets it on its next sync.
+- Pairing requests and unknown tokens are limited per network, waiting codes
+  are unique, and wrong codes on the admin side are throttled, so neither codes
+  nor tokens can be guessed in bulk.

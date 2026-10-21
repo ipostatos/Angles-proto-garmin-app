@@ -66,6 +66,8 @@ function withoutOrphans(holds, angles) {
     return angles.filter((a) => ids.has(a.holdId));
 }
 
+const normName = (n) => String(n ?? '').trim().toLowerCase();
+
 /**
  * @returns {{ mine: object, theirs: object, conflicts: Array<{kind, id, label}> }}
  *   `mine` resolves conflicts in favour of this editor, `theirs` in favour of
@@ -77,13 +79,49 @@ export function mergeCatalogs(base, mine, theirs) {
     const names = new Map([...(base?.holds || []), ...(theirs?.holds || []), ...(mine?.holds || [])].map((h) => [h.id, h.name]));
     const angleLabel = (a) => `${names.get(a?.holdId) ?? '?'} ${String(a?.saw ?? '').toUpperCase()} ${a?.value ?? '?'}°`;
     const angles = mergeList(base?.angles, mine?.angles, theirs?.angles, angleLabel);
+    const conflicts = [
+        ...holds.conflicts.map((c) => ({ kind: 'hold', ...c })),
+        ...angles.conflicts.map((c) => ({ kind: 'angle', ...c })),
+    ];
+    const conflictIds = new Set(conflicts.map((c) => c.id));
+
+    // My new or edited angle on a hold the other admin deleted: never drop it
+    // silently. "Mine" brings the hold back, "theirs" lets it go.
+    const baseAngles = byId(base?.angles);
+    const baseHolds = byId(base?.holds);
+    const myHolds = byId(mine?.holds);
+    const mineHoldIds = new Set(holds.mine.map((h) => h.id));
+    for (const a of angles.mine) {
+        if (mineHoldIds.has(a.holdId) || conflictIds.has(a.id)) continue;
+        if (same(a, baseAngles.get(a.id))) continue;
+        conflicts.push({ kind: 'angle', id: a.id, label: `${angleLabel(a)} (hold deleted by the other admin)` });
+        conflictIds.add(a.id);
+        const hold = myHolds.get(a.holdId) ?? baseHolds.get(a.holdId);
+        if (hold && !mineHoldIds.has(hold.id)) {
+            holds.mine.push(hold);
+            mineHoldIds.add(hold.id);
+        }
+    }
+
+    // Both admins created a hold with the same name.
+    const theirNames = new Map((theirs?.holds || []).map((h) => [normName(h.name), h.id]));
+    const dropFromTheirs = new Set();
+    for (const h of mine?.holds || []) {
+        const other = theirNames.get(normName(h.name));
+        if (baseHolds.has(h.id) || other == null || other === h.id) continue;
+        conflicts.push({ kind: 'hold', id: h.id, label: `${h.name} (also added by the other admin)` });
+        const taken = new Set(holds.mine.map((x) => normName(x.name)));
+        let n = 2;
+        while (taken.has(normName(`${h.name} (${n})`))) n++;
+        holds.mine = holds.mine.map((x) => (x.id === h.id ? { ...x, name: `${h.name} (${n})` } : x));
+        dropFromTheirs.add(h.id);
+    }
+    const theirsHolds = holds.theirs.filter((h) => !dropFromTheirs.has(h.id));
+
     const meta = { ...(theirs || {}), ...(mine || {}) };
     return {
         mine: { ...meta, holds: holds.mine, angles: withoutOrphans(holds.mine, angles.mine) },
-        theirs: { ...meta, holds: holds.theirs, angles: withoutOrphans(holds.theirs, angles.theirs) },
-        conflicts: [
-            ...holds.conflicts.map((c) => ({ kind: 'hold', ...c })),
-            ...angles.conflicts.map((c) => ({ kind: 'angle', ...c })),
-        ],
+        theirs: { ...meta, holds: theirsHolds, angles: withoutOrphans(theirsHolds, angles.theirs) },
+        conflicts,
     };
 }

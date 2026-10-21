@@ -4,7 +4,7 @@ import { login as apiLogin } from "../../storage/auth.js";
 import { theme } from "../../styles/theme.js";
 
 const MIN_PASSWORD = 10;
-const MIN_CODE = 6;
+const MIN_CODE = 8;
 
 function Field({ label, hint, ...props }) {
     return (

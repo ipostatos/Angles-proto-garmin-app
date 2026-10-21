@@ -5,16 +5,18 @@ import { getState, putState } from './_lib/stateService.js';
 import { neonStore } from './_lib/stateStore.js';
 import { neonSettingsStore } from './_lib/settingsStore.js';
 import { canRead, resolveReader } from './_lib/access.js';
-import { getSessionUser } from './_lib/session.js';
+import { getAdminUser } from './_lib/session.js';
+import { getUserByUsername } from './_lib/db.js';
 import { PayloadTooLargeError, readJsonBody } from './_lib/http.js';
 
 export const STATE_BODY_LIMIT_BYTES = 5 * 1024 * 1024;
 
 /** Testable handler: store is injected so it can be exercised without a DB. */
-export async function handleState(req, res, store, settingsStore = neonSettingsStore) {
+export async function handleState(req, res, store, settingsStore = neonSettingsStore, opts = {}) {
+    const lookupUser = opts.lookupUser ?? getUserByUsername;
     try {
         if (req.method === 'GET') {
-            if (!canRead(await resolveReader(req.headers?.cookie, settingsStore))) {
+            if (!canRead(await resolveReader(req.headers?.cookie, settingsStore, { lookupUser }))) {
                 res.status(401).json({ error: 'locked' });
                 return;
             }
@@ -24,7 +26,7 @@ export async function handleState(req, res, store, settingsStore = neonSettingsS
         }
 
         if (req.method === 'PUT') {
-            const username = getSessionUser(req.headers?.cookie);
+            const username = await getAdminUser(req.headers?.cookie, lookupUser);
             if (!username) {
                 res.status(401).json({ error: 'unauthorized' });
                 return;

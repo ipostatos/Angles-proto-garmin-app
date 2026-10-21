@@ -12,8 +12,25 @@
 export const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 export const LOGIN_MAX_FAILURES = 8;
 
+/**
+ * Throttle bucket for a client address. IPv6 users usually own a whole /64,
+ * so an address is reduced to its first four groups; otherwise rotating the
+ * last 64 bits would give fresh attempts on every request.
+ */
+export function ipBucket(ip) {
+    const s = String(ip || 'unknown').trim().toLowerCase();
+    if (!s.includes(':') || /^::ffff:\d+\.\d+\.\d+\.\d+$/.test(s)) return s.replace(/^::ffff:/, '');
+    const [head, tail = ''] = s.split('::');
+    const left = head ? head.split(':') : [];
+    const right = tail ? tail.split(':') : [];
+    const groups = s.includes('::')
+        ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right]
+        : left;
+    return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/64`;
+}
+
 export function rateLimitKey(ip, username) {
-    return `${ip || 'unknown'}:${String(username || '').toLowerCase()}`;
+    return `${ipBucket(ip)}:${String(username || '').toLowerCase()}`;
 }
 
 /**

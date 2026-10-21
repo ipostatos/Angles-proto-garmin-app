@@ -20,15 +20,24 @@ function sign(payloadB64, secret) {
 }
 
 /**
+ * Short fingerprint of a stored password hash. Sessions carry it, so changing
+ * the password ends every session that was opened with the old one.
+ */
+export function passwordFingerprint(passHash) {
+    return crypto.createHash('sha256').update(String(passHash)).digest('base64url').slice(0, 16);
+}
+
+/**
  * Create a signed session token: `base64url(payload).signature`.
  * @param {string} username
- * @param {{ secret?: string, ttlMs?: number, now?: number }} [opts]
+ * @param {{ secret?: string, ttlMs?: number, now?: number, fp?: string }} [opts]
+ *   fp — passwordFingerprint() of the user's current hash
  */
 export function signSession(username, opts = {}) {
     const secret = getSecret(opts);
     const ttl = opts.ttlMs ?? DEFAULT_TTL_MS;
     const expiry = (opts.now ?? Date.now()) + ttl;
-    const payloadB64 = Buffer.from(JSON.stringify({ u: username, e: expiry })).toString('base64url');
+    const payloadB64 = Buffer.from(JSON.stringify({ u: username, e: expiry, p: opts.fp ?? null })).toString('base64url');
     return `${payloadB64}.${sign(payloadB64, secret)}`;
 }
 
@@ -55,7 +64,7 @@ export function verifySession(token, opts = {}) {
         const now = opts.now ?? Date.now();
         if (typeof payload.e !== 'number' || payload.e <= now) return null;
         if (typeof payload.u !== 'string' || !payload.u) return null;
-        return { username: payload.u, expiry: payload.e };
+        return { username: payload.u, expiry: payload.e, fp: typeof payload.p === 'string' ? payload.p : null };
     } catch {
         return null;
     }
@@ -85,6 +94,22 @@ export function getSessionUser(cookieHeader, opts = {}) {
     const token = parseCookies(cookieHeader)[COOKIE_NAME];
     if (!token) return null;
     return verifySession(token, opts)?.username ?? null;
+}
+
+/**
+ * The admin behind a session cookie, or null. Unlike getSessionUser this
+ * checks the database: the user must still exist and the token's password
+ * fingerprint must match the current password (so a password change, or
+ * deleting the user, revokes every open session).
+ * @param {(username: string) => Promise<{ pass_hash: string }|null>} lookupUser
+ */
+export async function getAdminUser(cookieHeader, lookupUser, opts = {}) {
+    const token = parseCookies(cookieHeader)[COOKIE_NAME];
+    const session = token ? verifySession(token, opts) : null;
+    if (!session?.fp) return null;
+    const user = await lookupUser(session.username);
+    if (!user || passwordFingerprint(user.pass_hash) !== session.fp) return null;
+    return session.username;
 }
 
 /** Build a Set-Cookie value carrying the session token. */

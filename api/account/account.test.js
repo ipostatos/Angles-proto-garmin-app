@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { handleAccount, setupTokenRequired } from './[action].js';
 import { hashPassword } from '../_lib/password.js';
 import { ACCESS_COOKIE, verifyAccess } from '../_lib/access.js';
-import { COOKIE_NAME, buildSessionCookie, signSession, verifySession } from '../_lib/session.js';
+import { COOKIE_NAME, buildSessionCookie, passwordFingerprint, signSession, verifySession } from '../_lib/session.js';
 
 const SECRET = 'account-test-secret';
 
@@ -90,7 +90,7 @@ describe('/api/account/status', () => {
 });
 
 describe('/api/account/setup', () => {
-    const good = { username: 'Owner', password: 'long-password-1', workshopCode: 'saw-2026' };
+    const good = { username: 'Owner', password: 'long-password-1', workshopCode: 'saw-2026-x' };
 
     it('creates the first admin, sets the workshop code and signs in', async () => {
         const settings = memorySettings();
@@ -110,10 +110,17 @@ describe('/api/account/setup', () => {
     });
 
     it('needs the setup token on Vercel', async () => {
-        const env = { VERCEL_ENV: 'production', SETUP_TOKEN: 'tok-123' };
+        const env = { VERCEL_ENV: 'production', SETUP_TOKEN: 'tok-123-abcdefghijklmnopqrstuvwxyz' };
         const settings = memorySettings();
         expect((await call('setup', { body: good, settings, env })).statusCode).toBe(403);
-        expect((await call('setup', { body: { ...good, setupToken: 'tok-123' }, settings, env })).statusCode).toBe(200);
+        expect((await call('setup', { body: { ...good, setupToken: env.SETUP_TOKEN }, settings, env })).statusCode).toBe(200);
+    });
+
+    it('refuses a short SETUP_TOKEN and is required with NODE_ENV=production', async () => {
+        expect(setupTokenRequired({ NODE_ENV: 'production' })).toBe(true);
+        const env = { VERCEL_ENV: 'production', SETUP_TOKEN: 'short' };
+        const res = await call('setup', { body: { ...good, setupToken: 'short' }, settings: memorySettings(), env });
+        expect(res.statusCode).toBe(503);
     });
 
     it('is closed on Vercel when no SETUP_TOKEN is configured', async () => {
@@ -124,7 +131,7 @@ describe('/api/account/setup', () => {
     it('rejects a short password or code', async () => {
         const settings = memorySettings();
         expect((await call('setup', { body: { ...good, password: 'short' }, settings })).statusCode).toBe(400);
-        expect((await call('setup', { body: { ...good, workshopCode: '123' }, settings })).statusCode).toBe(400);
+        expect((await call('setup', { body: { ...good, workshopCode: '1234567' }, settings })).statusCode).toBe(400);
         expect(settings.state.users).toHaveLength(0);
     });
 });
@@ -137,6 +144,19 @@ describe('/api/account/unlock', () => {
         expect(res.statusCode).toBe(200);
         expect(verifyAccess(cookieValue(res.headers['Set-Cookie'], ACCESS_COOKIE), 3, { secret: SECRET })).toBe(true);
     });
+
+    it('stops all guesses after the global failure limit, from any address', async () => {
+        const { hash, salt } = hashPassword('saw-2026');
+        const settings = memorySettings({ code: { hash, salt, version: 1 } });
+        const rate = memoryRate();
+        const unlock = async (ip, code) => {
+            const res = mockRes();
+            await handleAccount({ method: 'POST', query: { action: 'unlock' }, headers: { 'x-real-ip': ip }, body: { code } }, res, { settings, rateStore: rate, env: {} });
+            return res;
+        };
+        for (let i = 0; i < 100; i++) await unlock(`10.0.${i >> 8}.${i & 255}`, `nope-${i}`);
+        expect((await unlock('192.0.2.1', 'saw-2026')).statusCode).toBe(429);
+    }, 30000); // 100 scrypt checks
 
     it('rejects a wrong code and throttles repeated guesses', async () => {
         const { hash, salt } = hashPassword('saw-2026');
@@ -155,27 +175,39 @@ describe('/api/account/unlock', () => {
 });
 
 describe('admin-only actions', () => {
-    const admin = () => buildSessionCookie(signSession('Tomek', { secret: SECRET }), { secure: false });
+    // session cookie for the user record as it is stored in `settings`
+    const admin = (settings) => {
+        const u = settings.state.users.find((x) => x.username === 'Tomek');
+        return buildSessionCookie(signSession('Tomek', { secret: SECRET, fp: passwordFingerprint(u.pass_hash) }), { secure: false });
+    };
 
     it('need a session', async () => {
         const settings = memorySettings();
         expect((await call('password', { body: {}, settings })).statusCode).toBe(401);
-        expect((await call('workshop-code', { body: { code: 'new-code-1' }, settings })).statusCode).toBe(401);
+        expect((await call('workshop-code', { body: { code: 'new-code-12' }, settings })).statusCode).toBe(401);
     });
 
     it('password change checks the current password', async () => {
         const settings = memorySettings({ users: [userWith('Tomek', 'old-password-1')] });
-        const bad = await call('password', { cookie: admin(), settings, body: { currentPassword: 'wrong', newPassword: 'new-password-1' } });
+        const oldCookie = admin(settings);
+        const bad = await call('password', { cookie: oldCookie, settings, body: { currentPassword: 'wrong', newPassword: 'new-password-1' } });
         expect(bad.statusCode).toBe(403);
-        const ok = await call('password', { cookie: admin(), settings, body: { currentPassword: 'old-password-1', newPassword: 'new-password-1' } });
+        const ok = await call('password', { cookie: oldCookie, settings, body: { currentPassword: 'old-password-1', newPassword: 'new-password-1' } });
         expect(ok.statusCode).toBe(200);
         expect(settings.state.events[0].action).toBe('password_changed');
+        // the old cookie is dead, the fresh one from the response works
+        const body = { code: 'new-code-123', currentPassword: 'new-password-1' };
+        expect((await call('workshop-code', { cookie: oldCookie, settings, body })).statusCode).toBe(401);
+        const fresh = `${COOKIE_NAME}=${cookieValue(ok.headers['Set-Cookie'], COOKIE_NAME)}`;
+        expect((await call('workshop-code', { cookie: fresh, settings, body })).statusCode).toBe(200);
     });
 
     it('new workshop code bumps the version', async () => {
-        const { hash, salt } = hashPassword('saw-2026');
-        const settings = memorySettings({ code: { hash, salt, version: 1 } });
-        const res = await call('workshop-code', { cookie: admin(), settings, body: { code: 'saw-2027' } });
+        const { hash, salt } = hashPassword('saw-2026-a');
+        const settings = memorySettings({ users: [userWith('Tomek', 'my-password-1')], code: { hash, salt, version: 1 } });
+        const noPw = await call('workshop-code', { cookie: admin(settings), settings, body: { code: 'saw-2027-b' } });
+        expect(noPw.statusCode).toBe(403);
+        const res = await call('workshop-code', { cookie: admin(settings), settings, body: { code: 'saw-2027-b', currentPassword: 'my-password-1' } });
         expect(res.statusCode).toBe(200);
         expect(settings.state.code.version).toBe(2);
     });

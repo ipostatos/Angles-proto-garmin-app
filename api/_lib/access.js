@@ -4,11 +4,12 @@
 // cookie). It carries the code version: changing the workshop code bumps the
 // version and signs every device out.
 import crypto from 'node:crypto';
-import { getSessionUser, parseCookies } from './session.js';
+import { getAdminUser, parseCookies } from './session.js';
+import { getUserByUsername } from './db.js';
 
 export const ACCESS_COOKIE = 'angles_access';
 export const ACCESS_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
-export const MIN_WORKSHOP_CODE_LENGTH = 6;
+export const MIN_WORKSHOP_CODE_LENGTH = 8;
 export const MAX_WORKSHOP_CODE_LENGTH = 128;
 
 function accessKey(opts) {
@@ -75,7 +76,7 @@ export function buildClearAccessCookie(opts = {}) {
  * the request is locked.
  */
 export async function resolveReader(cookieHeader, settingsStore, opts = {}) {
-    const username = getSessionUser(cookieHeader, opts);
+    const username = await getAdminUser(cookieHeader, opts.lookupUser ?? getUserByUsername, opts);
     if (username) return { username, workshop: false };
     const token = parseCookies(cookieHeader)[ACCESS_COOKIE];
     if (!token) return { username: null, workshop: false };

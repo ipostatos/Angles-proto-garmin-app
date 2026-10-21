@@ -7,7 +7,8 @@
 // the catalog.
 import crypto from 'node:crypto';
 import { get, put } from '@vercel/blob';
-import { getSessionUser } from './_lib/session.js';
+import { getAdminUser } from './_lib/session.js';
+import { getUserByUsername } from './_lib/db.js';
 import { canRead, resolveReader } from './_lib/access.js';
 import { neonSettingsStore } from './_lib/settingsStore.js';
 import { PayloadTooLargeError, readJsonBody } from './_lib/http.js';
@@ -34,6 +35,7 @@ export async function handleImages(req, res, opts = {}) {
     const blob = opts.blob ?? { get, put };
     const settings = opts.settingsStore ?? neonSettingsStore;
     const env = opts.env ?? process.env;
+    const lookupUser = opts.lookupUser ?? getUserByUsername;
     try {
         if (req.method === 'GET') {
             const path = req.query?.p;
@@ -41,7 +43,7 @@ export async function handleImages(req, res, opts = {}) {
                 res.status(400).json({ error: 'bad_path' });
                 return;
             }
-            if (!canRead(await resolveReader(req.headers?.cookie, settings))) {
+            if (!canRead(await resolveReader(req.headers?.cookie, settings, { lookupUser }))) {
                 res.status(401).json({ error: 'locked' });
                 return;
             }
@@ -51,8 +53,8 @@ export async function handleImages(req, res, opts = {}) {
                 return;
             }
             res.setHeader('Content-Type', found.blob?.contentType || 'image/jpeg');
-            // names are random and never reused, so the browser may keep them
-            res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+            // a day, so a device signed out by a new workshop code does not keep them for long
+            res.setHeader('Cache-Control', 'private, max-age=86400');
             res.setHeader('X-Content-Type-Options', 'nosniff');
             const bytes = Buffer.from(await new Response(found.stream).arrayBuffer());
             res.status(200).send(bytes);
@@ -60,7 +62,7 @@ export async function handleImages(req, res, opts = {}) {
         }
 
         if (req.method === 'POST') {
-            if (!getSessionUser(req.headers?.cookie)) {
+            if (!(await getAdminUser(req.headers?.cookie, lookupUser))) {
                 res.status(401).json({ error: 'unauthorized' });
                 return;
             }

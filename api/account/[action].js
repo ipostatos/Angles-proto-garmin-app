@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { hashPassword, verifyPassword } from '../_lib/password.js';
 import { authenticateUser, hasAcceptableCredentialShape, normalizeLoginUsername } from '../_lib/auth.js';
 import { getUserByUsername } from '../_lib/db.js';
-import { buildSessionCookie, getSessionUser, signSession } from '../_lib/session.js';
+import { buildSessionCookie, getAdminUser, passwordFingerprint, signSession } from '../_lib/session.js';
 import {
     buildAccessCookie, buildClearAccessCookie, isAcceptableWorkshopCode,
     resolveReader, signAccess, MIN_WORKSHOP_CODE_LENGTH,
@@ -20,11 +20,18 @@ import { neonRateLimitStore } from '../_lib/rateLimitStore.js';
 import { clearFailures, isRateLimited, rateLimitKey, recordFailure } from '../_lib/rateLimit.js';
 
 export const MIN_PASSWORD_LENGTH = 10;
+export const MIN_SETUP_TOKEN_LENGTH = 24;
+// All wrong workshop codes together, from any address: a slow brute force
+// spread over many networks still stops (existing devices keep working).
+export const GLOBAL_UNLOCK_FAILURES = 100;
 const BODY_LIMIT = 16 * 1024;
 
-/** In production the first-run form must carry SETUP_TOKEN, so a fresh public deploy cannot be claimed by a stranger. */
+/**
+ * Outside local development the first-run form must carry SETUP_TOKEN, so a
+ * fresh deploy cannot be claimed by a stranger.
+ */
 export function setupTokenRequired(env = process.env) {
-    return Boolean(env.SETUP_TOKEN) || Boolean(env.VERCEL_ENV);
+    return Boolean(env.SETUP_TOKEN) || Boolean(env.VERCEL_ENV) || env.NODE_ENV === 'production';
 }
 
 function tokenMatches(given, expected) {
@@ -43,7 +50,7 @@ function passwordProblem(password) {
 }
 
 async function status(req, res, deps) {
-    const reader = await resolveReader(req.headers?.cookie, deps.settings);
+    const reader = await resolveReader(req.headers?.cookie, deps.settings, { lookupUser: deps.lookupUser });
     const [users, workshop] = await Promise.all([deps.settings.countUsers(), deps.settings.getWorkshopCode()]);
     res.status(200).json({
         needsSetup: users === 0,
@@ -62,8 +69,8 @@ async function setup(req, res, deps) {
         return;
     }
     if (setupTokenRequired(deps.env)) {
-        if (!deps.env.SETUP_TOKEN) {
-            res.status(503).json({ error: 'setup_token_missing', message: 'Set the SETUP_TOKEN environment variable first.' });
+        if (!deps.env.SETUP_TOKEN || deps.env.SETUP_TOKEN.length < MIN_SETUP_TOKEN_LENGTH) {
+            res.status(503).json({ error: 'setup_token_missing', message: `Set the SETUP_TOKEN environment variable (at least ${MIN_SETUP_TOKEN_LENGTH} random characters) first.` });
             return;
         }
         if (!tokenMatches(body.setupToken, deps.env.SETUP_TOKEN)) {
@@ -91,14 +98,16 @@ async function setup(req, res, deps) {
     const code = hashPassword(body.workshopCode.trim());
     await deps.settings.setWorkshopCode({ hash: code.hash, salt: code.salt });
     await clearFailures(deps.rate, key);
-    res.setHeader('Set-Cookie', buildSessionCookie(signSession(username)));
+    res.setHeader('Set-Cookie', buildSessionCookie(signSession(username, { fp: passwordFingerprint(pw.hash) })));
     res.status(200).json({ username });
 }
 
 async function unlock(req, res, deps) {
     const body = await readJsonBody(req, { maxBytes: BODY_LIMIT });
     const key = rateLimitKey(getClientIp(req), 'workshop-code');
-    if (await isRateLimited(deps.rate, key, deps.now)) {
+    const globalKey = 'global:workshop-code';
+    if (await isRateLimited(deps.rate, key, deps.now)
+        || await isRateLimited(deps.rate, globalKey, deps.now, { maxFailures: GLOBAL_UNLOCK_FAILURES })) {
         res.status(429).json({ error: 'too_many_attempts', message: 'Too many wrong codes. Try again later.' });
         return;
     }
@@ -106,6 +115,7 @@ async function unlock(req, res, deps) {
     const code = typeof body.code === 'string' ? body.code.trim() : '';
     if (!workshop || !code || code.length > 128 || !verifyPassword(code, workshop.hash, workshop.salt)) {
         await recordFailure(deps.rate, key, deps.now);
+        await recordFailure(deps.rate, globalKey, deps.now);
         res.status(401).json({ error: 'invalid_code', message: 'Wrong workshop code.' });
         return;
     }
@@ -135,11 +145,24 @@ async function changePassword(req, res, deps, username) {
     await deps.settings.updatePassword({ username, hash: pw.hash, salt: pw.salt });
     await deps.settings.logEvent({ username, action: 'password_changed', entity: username });
     await clearFailures(deps.rate, key);
+    // Every other session (old password fingerprint) is now invalid; this one gets a fresh cookie.
+    res.setHeader('Set-Cookie', buildSessionCookie(signSession(username, { fp: passwordFingerprint(pw.hash) })));
     res.status(200).json({ ok: true });
 }
 
 async function setWorkshopCode(req, res, deps, username) {
     const body = await readJsonBody(req, { maxBytes: BODY_LIMIT });
+    // Locks every operator out until they get the new code: ask for the password, not just the cookie.
+    const key = rateLimitKey(getClientIp(req), `password:${username}`);
+    if (await isRateLimited(deps.rate, key, deps.now)) {
+        res.status(429).json({ error: 'too_many_attempts' });
+        return;
+    }
+    if (!(await authenticateUser(username, body.currentPassword, deps.lookupUser))) {
+        await recordFailure(deps.rate, key, deps.now);
+        res.status(403).json({ error: 'wrong_password', message: 'Your password is not correct.' });
+        return;
+    }
     if (!isAcceptableWorkshopCode(body.code)) {
         res.status(400).json({ error: 'invalid_body', message: `Workshop code must be at least ${MIN_WORKSHOP_CODE_LENGTH} characters.` });
         return;
@@ -174,7 +197,7 @@ export async function handleAccount(req, res, opts = {}) {
             return;
         }
         if (action === 'password' || action === 'workshop-code') {
-            const username = getSessionUser(req.headers?.cookie);
+            const username = await getAdminUser(req.headers?.cookie, deps.lookupUser);
             if (!username) {
                 res.status(401).json({ error: 'unauthorized' });
                 return;

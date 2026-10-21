@@ -1,8 +1,9 @@
 // Stations (one per saw / operator) and the watches paired to them.
 // Each station keeps its own "Send to watch" selection, so two operators never
-// overwrite each other's job. A watch is identified by a random token it
-// generates itself; only its SHA-256 is stored. Tables are created lazily and
-// the old single-row `watch_selection` becomes the first station.
+// overwrite each other's job. A watch is identified by a random token the
+// server issues when pairing starts; only its SHA-256 is stored. Tables are
+// created lazily and the old single-row `watch_selection` becomes the first
+// station (once: a settings flag remembers it).
 import { getSql } from './db.js';
 
 let ensured = false;
@@ -20,7 +21,7 @@ async function ensure(sql) {
     await sql`
         CREATE TABLE IF NOT EXISTS watch_devices (
             token_hash   TEXT PRIMARY KEY,
-            station_id   INT REFERENCES stations(id) ON DELETE SET NULL,
+            station_id   INT REFERENCES stations(id) ON DELETE CASCADE,
             label        TEXT,
             pair_code    TEXT,
             pair_expires TIMESTAMPTZ,
@@ -28,15 +29,30 @@ async function ensure(sql) {
             last_seen    TIMESTAMPTZ
         )
     `;
-    await sql`CREATE INDEX IF NOT EXISTS watch_devices_pair_code_idx ON watch_devices (pair_code)`;
+    // a live pairing code belongs to exactly one waiting watch
+    await sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS watch_devices_pending_code_idx
+            ON watch_devices (pair_code) WHERE station_id IS NULL
+    `;
     // One-time carry-over of the v1 single selection into a first station.
+    // The flag makes it run once ever, not on every cold start.
+    await sql`
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    `;
     await sql`
         DO $$
         BEGIN
-            IF NOT EXISTS (SELECT 1 FROM stations)
-               AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'watch_selection') THEN
-                INSERT INTO stations (name, holds, sent_at)
-                SELECT 'Saw 1', holds, sent_at FROM watch_selection WHERE id = 1;
+            IF NOT EXISTS (SELECT 1 FROM settings WHERE key = 'stations_migrated') THEN
+                INSERT INTO settings (key, value) VALUES ('stations_migrated', 'true'::jsonb)
+                ON CONFLICT (key) DO NOTHING;
+                IF NOT EXISTS (SELECT 1 FROM stations)
+                   AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'watch_selection') THEN
+                    INSERT INTO stations (name, holds, sent_at)
+                    SELECT 'Saw 1', holds, sent_at FROM watch_selection WHERE id = 1
+                    ON CONFLICT (name) DO NOTHING;
+                END IF;
             END IF;
         END $$
     `;
@@ -123,13 +139,23 @@ export const neonStationStore = {
     },
 
     /**
-     * Register (or refresh) an unpaired watch with a pairing code. An already
-     * approved watch keeps its station. Expired pending rows are swept here.
+     * Register (or refresh) a waiting watch with a pairing code. An already
+     * approved watch keeps its station. Expired waiting rows are swept, and
+     * when `maxPending` are waiting the oldest one makes room, so a flood can
+     * delay pairing but never block it.
+     * @returns {{ alreadyPaired: boolean }} — throws { code: '23505' } on a code clash
      */
-    async startPairing(tokenHash, code, expiresMs) {
+    async startPairing(tokenHash, code, expiresMs, maxPending) {
         const sql = getSql();
         await ensure(sql);
-        await sql`DELETE FROM watch_devices WHERE station_id IS NULL AND pair_expires < now()`;
+        await sql`DELETE FROM watch_devices WHERE station_id IS NULL AND (pair_expires IS NULL OR pair_expires < now())`;
+        await sql`
+            DELETE FROM watch_devices WHERE token_hash IN (
+                SELECT token_hash FROM watch_devices
+                 WHERE station_id IS NULL AND token_hash <> ${tokenHash}
+                 ORDER BY created_at DESC OFFSET ${Math.max(0, maxPending - 1)}
+            )
+        `;
         const expires = new Date(expiresMs).toISOString();
         const rows = await sql`
             INSERT INTO watch_devices (token_hash, pair_code, pair_expires)
@@ -140,13 +166,6 @@ export const neonStationStore = {
             RETURNING station_id
         `;
         return { alreadyPaired: rows[0]?.station_id != null };
-    },
-
-    async countPending() {
-        const sql = getSql();
-        await ensure(sql);
-        const rows = await sql`SELECT count(*)::int AS n FROM watch_devices WHERE station_id IS NULL AND pair_expires > now()`;
-        return rows[0].n;
     },
 
     /** Approve the pending watch that shows `code`; returns false when no such code is live. */

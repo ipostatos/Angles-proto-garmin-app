@@ -4,7 +4,7 @@ import { changePassword, setWorkshopCode } from "../../storage/account.js";
 import { theme } from "../../styles/theme.js";
 
 const MIN_PASSWORD = 10;
-const MIN_CODE = 6;
+const MIN_CODE = 8;
 
 const inputStyle = {
     height: 38, padding: "0 10px", borderRadius: 6, fontSize: 14, width: "100%", boxSizing: "border-box",
@@ -25,6 +25,7 @@ function Section({ title, text, children }) {
 export function AdminSettings({ styles, children }) {
     const [pw, setPw] = useState({ current: "", next: "", repeat: "" });
     const [code, setCode] = useState("");
+    const [codePw, setCodePw] = useState("");
     const [busy, setBusy] = useState("");
 
     const savePassword = async () => {
@@ -34,7 +35,7 @@ export function AdminSettings({ styles, children }) {
         try {
             await changePassword(pw.current, pw.next);
             setPw({ current: "", next: "", repeat: "" });
-            toast.success("Password changed");
+            toast.success("Password changed. Other devices signed in with the old password are signed out.");
         } catch (err) {
             toast.error(err.message || "Could not change the password.");
         } finally {
@@ -46,8 +47,9 @@ export function AdminSettings({ styles, children }) {
         if (code.trim().length < MIN_CODE) return toast.error(`Workshop code: at least ${MIN_CODE} characters.`);
         setBusy("code");
         try {
-            await setWorkshopCode(code);
+            await setWorkshopCode(code, codePw);
             setCode("");
+            setCodePw("");
             toast.success("Workshop code changed. Operators enter the new code on their next visit.");
         } catch (err) {
             toast.error(err.message || "Could not change the workshop code.");
@@ -65,6 +67,7 @@ export function AdminSettings({ styles, children }) {
                 text="Operators open the catalog with this code; a device stays unlocked for 30 days. Setting a new code signs every operator device out at once (use it when someone leaves)."
             >
                 <input style={inputStyle} type="password" autoComplete="off" placeholder={`New code, at least ${MIN_CODE} characters`} value={code} onChange={(e) => setCode(e.target.value)} />
+                <input style={inputStyle} type="password" autoComplete="current-password" placeholder="Your password" value={codePw} onChange={(e) => setCodePw(e.target.value)} />
                 <button type="button" style={styles.btnPrimary} disabled={busy === "code"} onClick={saveCode}>
                     {busy === "code" ? "SAVING…" : "SET WORKSHOP CODE"}
                 </button>

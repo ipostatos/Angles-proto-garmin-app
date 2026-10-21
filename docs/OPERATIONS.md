@@ -12,7 +12,7 @@
 |---|---|---|
 | `DATABASE_URL` | yes | Neon connection string. Server-only. |
 | `SESSION_SECRET` | yes | Long random string; signs admin sessions and (through a derived key) workshop access cookies. Rotating it signs everyone out. |
-| `SETUP_TOKEN` | yes on Vercel, for the first run | Random string the first-run screen asks for, so nobody else can claim a fresh deploy. Can be removed after the admin exists. |
+| `SETUP_TOKEN` | yes on Vercel or with `NODE_ENV=production`, for the first run | Random string, **24+ characters**, that the first-run screen asks for, so nobody else can claim a fresh deploy. Can be removed after the admin exists. |
 | `BLOB_READ_WRITE_TOKEN` | recommended | Set automatically when a **private** Vercel Blob store is connected to the project. Without it images stay inside the catalog JSON. |
 
 None of these may use a `VITE_` prefix.
@@ -23,7 +23,7 @@ None of these may use a `VITE_` prefix.
 2. Deploy. Tables are created on first use (or run `npm run db:setup`).
 3. Open the site. The **Welcome to Angles** screen asks for the setup token,
    the admin name and password (10+ characters) and the **workshop code**
-   (6+ characters).
+   (8+ characters; a short phrase is easier to share than a number).
 4. The empty-catalog guide opens: add holds, angles, drawings, then SAVE.
 5. Give operators the workshop code. Add stations and pair watches in
    ADMIN → SETTINGS ([`WATCH_SETUP.md`](WATCH_SETUP.md)).
@@ -38,6 +38,8 @@ None of these may use a `VITE_` prefix.
    → connect to the project), then redeploy so `BLOB_READ_WRITE_TOKEN` is set.
 3. Deploy. New tables (`settings`, `stations`, `watch_devices`) are created on
    first use; the old single watch selection becomes station **Saw 1**.
+   Admins have to **sign in again** once: v2.0 sessions carry a password
+   fingerprint, so v1.5 session cookies are no longer accepted.
 4. Admin: SETTINGS → set the workshop code → **MOVE IMAGES TO STORAGE** →
    pair each watch (watches need app **1.2**; older watch builds stop syncing
    because `/api/watch` now requires a paired token).

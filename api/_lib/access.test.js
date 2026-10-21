@@ -1,9 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { ACCESS_COOKIE, signAccess, verifyAccess, resolveReader, isAcceptableWorkshopCode } from './access.js';
-import { COOKIE_NAME, signSession, verifySession } from './session.js';
+import { COOKIE_NAME, passwordFingerprint, signSession, verifySession } from './session.js';
+import { ipBucket } from './rateLimit.js';
 
 const opts = { secret: 'access-test-secret' };
 const settings = (version) => ({ async getWorkshopCode() { return version ? { hash: 'h', salt: 's', version } : null; } });
+
+describe('rate limit buckets', () => {
+    it('groups IPv6 by /64 and keeps IPv4 as is', () => {
+        expect(ipBucket('2001:db8:1:2:aaaa::1')).toBe(ipBucket('2001:db8:1:2:ffff:ffff:ffff:ffff'));
+        expect(ipBucket('2001:db8:1:2::1')).not.toBe(ipBucket('2001:db8:1:3::1'));
+        expect(ipBucket('203.0.113.7')).toBe('203.0.113.7');
+        expect(ipBucket('::ffff:203.0.113.7')).toBe('203.0.113.7');
+    });
+});
 
 describe('workshop access token', () => {
     it('verifies for the version it was issued for only', () => {
@@ -36,8 +46,10 @@ describe('workshop access token', () => {
 
 describe('resolveReader', () => {
     it('admin session wins without touching settings', async () => {
-        const cookie = `${COOKIE_NAME}=${signSession('Tomek', opts)}`;
-        const r = await resolveReader(cookie, { getWorkshopCode() { throw new Error('no'); } }, opts);
+        const fp = passwordFingerprint('h1');
+        const cookie = `${COOKIE_NAME}=${signSession('Tomek', { ...opts, fp })}`;
+        const lookupUser = async () => ({ pass_hash: 'h1' });
+        const r = await resolveReader(cookie, { getWorkshopCode() { throw new Error('no'); } }, { ...opts, lookupUser });
         expect(r).toEqual({ username: 'Tomek', workshop: false });
     });
 
@@ -54,9 +66,9 @@ describe('resolveReader', () => {
 });
 
 describe('isAcceptableWorkshopCode', () => {
-    it('needs at least 6 characters', () => {
-        expect(isAcceptableWorkshopCode('12345')).toBe(false);
-        expect(isAcceptableWorkshopCode('123456')).toBe(true);
-        expect(isAcceptableWorkshopCode('      ')).toBe(false);
+    it('needs at least 8 characters', () => {
+        expect(isAcceptableWorkshopCode('1234567')).toBe(false);
+        expect(isAcceptableWorkshopCode('12345678')).toBe(true);
+        expect(isAcceptableWorkshopCode('        ')).toBe(false);
     });
 });

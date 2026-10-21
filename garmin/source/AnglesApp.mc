@@ -1,17 +1,13 @@
 import Toybox.Application;
 import Toybox.Application.Storage;
 import Toybox.Communications;
-import Toybox.Cryptography;
 import Toybox.Lang;
-import Toybox.Math;
-import Toybox.StringUtil;
-import Toybox.System;
 import Toybox.WatchUi;
 
 // Catalog row: [name, [main angles], [stefan angles]]
 // GET response: { h: catalog, s: [hold names sent to this station], t: sentAt seconds, n: station name }
-// The watch is identified by a random token it makes on first start; an admin
-// pairs it to a station with the 6-digit code from POST ?a=pair.
+// The watch is identified by a random token the server issues with the
+// 6-digit pairing code (POST ?a=pair); an admin pairs it to a station.
 const CATALOG_URL = "https://avacut.vercel.app/api/watch";
 const APP_VERSION = "1.2";
 
@@ -33,35 +29,16 @@ function showHolds() as Void {
     WatchUi.switchToView(v, new ScrollDelegate(v), WatchUi.SLIDE_IMMEDIATE);
 }
 
-// 32 hex characters, made once and kept in Storage.
-function watchToken() as String {
-    var t = Storage.getValue("token");
-    if (t instanceof String && t.length() >= 32) {
-        return t;
-    }
-    var hex = "";
-    if (Toybox has :Cryptography) {
-        hex = StringUtil.convertEncodedString(Cryptography.randomBytes(16), {
-            :fromRepresentation => StringUtil.REPRESENTATION_BYTE_ARRAY,
-            :toRepresentation => StringUtil.REPRESENTATION_STRING_HEX
-        }) as String;
-    } else {
-        Math.srand(System.getTimer());
-        while (hex.length() < 32) {
-            hex += (Math.rand() & 0xFFFF).format("%04x");
-        }
-    }
-    Storage.setValue("token", hex);
-    return hex;
-}
-
+// Token from the server (kept in Storage); none before the first pairing.
 function requestOptions(method as Communications.HttpRequestMethod) as Dictionary {
+    var headers = { "Content-Type" => Communications.REQUEST_CONTENT_TYPE_JSON };
+    var token = Storage.getValue("token");
+    if (token instanceof String) {
+        headers["Authorization"] = "Bearer " + token;
+    }
     return {
         :method => method,
-        :headers => {
-            "Authorization" => "Bearer " + watchToken(),
-            "Content-Type" => Communications.REQUEST_CONTENT_TYPE_JSON
-        },
+        :headers => headers,
         :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
     };
 }
@@ -102,6 +79,9 @@ class PairHandler {
         if (code == 200 && data instanceof Dictionary && data["c"] instanceof String) {
             Storage.setValue("pairCode", data["c"]);
             Storage.deleteValue("station");
+            if (data["k"] instanceof String) {
+                Storage.setValue("token", data["k"]);
+            }
         } else if (code == 200) {
             // already paired: just sync
             Storage.deleteValue("pairCode");
@@ -120,9 +100,10 @@ class SyncHandler {
 
     function onResponse(code as Number, data as Dictionary or String or Null) as Void {
         if (code == 401) {
-            // unknown to the server: forget any old pairing
+            // unknown to the server (unpaired by an admin): forget the old pairing
             Storage.deleteValue("station");
             Storage.deleteValue("pairCode");
+            Storage.deleteValue("token");
             showSyncStatus(syncStatus());
             return;
         }

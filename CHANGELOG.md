@@ -19,10 +19,18 @@ follows [Semantic Versioning](https://semver.org/).
   watches. Password and code changes are logged in HISTORY.
 - **Stations.** One job per saw or operator; ⌚ asks which station. The old
   single watch selection becomes station *Saw 1*.
-- **Watch pairing.** Watches identify themselves with a token they generate;
-  the server stores only its SHA-256. A 6-digit code (15 min) pairs a watch to
-  a station; admins can move or unpair watches. Pairing requests and wrong
-  codes are throttled.
+- **Watch pairing.** The server issues each watch a random token together with
+  a 6-digit code (15 min) and stores only the token's SHA-256; an admin enters
+  the code to pair the watch to a station, and can move or unpair it later.
+  Pairing requests, unknown tokens and wrong codes are throttled; a flood of
+  requests evicts the oldest waiting ones instead of blocking pairing.
+- **Sessions follow the password.** Admin sessions carry a fingerprint of the
+  password hash: changing the password signs out every other device. Changing
+  the workshop code asks for the admin's password.
+- **Throttling by network:** IPv6 addresses are limited per /64, and all wrong
+  workshop codes together are capped (100 per 15 minutes). Workshop codes are
+  8+ characters; `SETUP_TOKEN` must be 24+ characters and is also required with
+  `NODE_ENV=production` outside Vercel.
 - **Garmin app 1.2:** PAIR WATCH screen with the code and automatic polling,
   station name under FROM PHONE, empty bundled catalog (`build-catalog.mjs`
   now reads an admin EXPORT).
@@ -31,7 +39,8 @@ follows [Semantic Versioning](https://semver.org/).
   SETTINGS → IMAGES moves existing ones; EXPORT puts them back inline.
 - **Stale-save merge.** A save that hits `409` is merged three-way with the
   latest catalog; the admin is asked only when the same record changed on both
-  sides.
+  sides, when a new angle sits on a hold the other admin deleted, or when both
+  added a hold with the same name.
 - Docs: `docs/WATCH_SETUP.md`, `docs/MULTI_OPERATOR.md`, deploy / first run /
   upgrade in `docs/OPERATIONS.md`.
 

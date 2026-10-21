@@ -80,4 +80,31 @@ describe('mergeCatalogs', () => {
         expect(r.theirs.holds.map((h) => h.name)).toEqual(['Amon']);
         expect(r.theirs.angles.map((a) => a.id)).toEqual(['a1']);
     });
+
+    it('asks instead of dropping my new angle on a hold the other admin deleted', () => {
+        const mine = clone(base);
+        mine.angles.push({ id: 'm1', holdId: 'h2', value: 12, saw: 'main' });
+        const theirs = clone(base);
+        theirs.holds = theirs.holds.filter((h) => h.id !== 'h2');
+        theirs.angles = theirs.angles.filter((a) => a.holdId !== 'h2');
+        const r = mergeCatalogs(base, mine, theirs);
+        expect(r.conflicts).toEqual([{ kind: 'angle', id: 'm1', label: 'Anton MAIN 12° (hold deleted by the other admin)' }]);
+        expect(r.mine.holds.map((h) => h.id)).toEqual(['h1', 'h2']);
+        expect(r.mine.angles.map((a) => a.id).sort()).toEqual(['a1', 'm1']); // their delete of a2 stands
+        expect(r.theirs.holds.map((h) => h.id)).toEqual(['h1']);
+        expect(r.theirs.angles.map((a) => a.id)).toEqual(['a1']);
+    });
+
+    it('treats the same new hold name on both sides as a conflict', () => {
+        const mine = clone(base);
+        mine.holds.push({ id: 'm9', name: 'Base 10' });
+        mine.angles.push({ id: 'ma', holdId: 'm9', value: 10, saw: 'main' });
+        const theirs = clone(base);
+        theirs.holds.push({ id: 't9', name: 'base 10' });
+        const r = mergeCatalogs(base, mine, theirs);
+        expect(r.conflicts).toEqual([{ kind: 'hold', id: 'm9', label: 'Base 10 (also added by the other admin)' }]);
+        expect(r.mine.holds.map((h) => h.name)).toEqual(['Amon', 'Anton', 'base 10', 'Base 10 (2)']);
+        expect(r.theirs.holds.map((h) => h.id)).toEqual(['h1', 'h2', 't9']);
+        expect(r.theirs.angles.some((a) => a.id === 'ma')).toBe(false);
+    });
 });

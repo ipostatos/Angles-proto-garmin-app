@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { handleState } from './state.js';
-import { buildSessionCookie, signSession } from './_lib/session.js';
+import { fakeAdmin } from './_lib/fakeAdmin.js';
 import { ACCESS_COOKIE, signAccess } from './_lib/access.js';
 import { hashPassword } from './_lib/password.js';
 
@@ -56,8 +56,8 @@ describe('/api/state read access', () => {
     it('serves GET to an admin session', async () => {
         process.env.SESSION_SECRET = SECRET;
         const res = mockRes();
-        const cookie = buildSessionCookie(signSession('Tomek', { secret: SECRET }), { secure: false });
-        await handleState({ method: 'GET', headers: { cookie } }, res, okStore, settingsV2);
+        const { cookie, lookupUser } = fakeAdmin('Tomek', SECRET);
+        await handleState({ method: 'GET', headers: { cookie } }, res, okStore, settingsV2, { lookupUser });
         expect(res.statusCode).toBe(200);
     });
 });
@@ -79,14 +79,14 @@ describe('/api/state route guards', () => {
     });
 
     it('rejects an oversized PUT body with 413 before storage work', async () => {
-        const token = signSession('Tomek', { secret: 'state-route-test-secret' });
         process.env.SESSION_SECRET = 'state-route-test-secret';
+        const { cookie, lookupUser } = fakeAdmin('Tomek', 'state-route-test-secret');
         const res = mockRes();
         await handleState({
             method: 'PUT',
-            headers: { cookie: buildSessionCookie(token, { secure: false }) },
+            headers: { cookie },
             body: JSON.stringify({ data: { holds: [], angles: [] }, revision: 1, pad: 'x'.repeat(6 * 1024 * 1024) }),
-        }, res, explodingStore);
+        }, res, explodingStore, undefined, { lookupUser });
         expect(res.statusCode).toBe(413);
         expect(res.body.error).toBe('payload_too_large');
     });

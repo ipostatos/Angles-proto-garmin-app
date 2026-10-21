@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import crypto from 'node:crypto';
-import { handleWatch, toWatchCatalog, watchTokenHash, MAX_PENDING_PAIRS } from './watch.js';
-import { buildSessionCookie, signSession } from './_lib/session.js';
+import { handleWatch, toWatchCatalog, watchTokenHash, MAX_PENDING_PAIRS, MAX_UNKNOWN_TOKENS } from './watch.js';
+import { fakeAdmin } from './_lib/fakeAdmin.js';
 import { ACCESS_COOKIE, signAccess } from './_lib/access.js';
 
 const SECRET = 'watch-test-secret';
@@ -66,13 +66,17 @@ function memoryStations() {
             return { stationId: s ? s.id : null, stationName: s?.name, holds: s?.holds ?? [], sentAt: s?.sentAt ?? 0, pairCode: d.code, pairExpires: d.expires };
         },
         async touchDevice() {},
-        async startPairing(h, code, expires) {
+        async startPairing(h, code, expires, maxPending) {
             const d = st.devices.get(h);
             if (d?.stationId) return { alreadyPaired: true };
+            if ([...st.devices.entries()].some(([k, x]) => k !== h && !x.stationId && x.code === code)) {
+                throw Object.assign(new Error('dup'), { code: '23505' });
+            }
+            const waiting = [...st.devices.entries()].filter(([k, x]) => !x.stationId && k !== h);
+            while (waiting.length >= maxPending) st.devices.delete(waiting.shift()[0]);
             st.devices.set(h, { stationId: null, code, expires });
             return { alreadyPaired: false };
         },
-        async countPending() { return [...st.devices.values()].filter((d) => !d.stationId).length; },
         async approvePairing(code, stationId, label) {
             if (!st.stations.some((s) => s.id === stationId)) return false;
             for (const d of st.devices.values()) {
@@ -105,7 +109,8 @@ function memoryRate() {
     };
 }
 
-const admin = () => buildSessionCookie(signSession('Tomek', { secret: SECRET }), { secure: false });
+const admin = () => fakeAdmin('Tomek', SECRET).cookie;
+const lookupUser = fakeAdmin('Tomek', SECRET).lookupUser;
 const workshop = () => `${ACCESS_COOKIE}=${signAccess(1, { secret: SECRET })}`;
 const bearer = (t) => ({ authorization: `Bearer ${t}` });
 const TOKEN = 'a'.repeat(32);
@@ -117,7 +122,7 @@ async function call({ method = 'GET', a, headers = {}, body, ip = '1.2.3.4' } = 
     await handleWatch(
         { method, query: a ? { a } : {}, headers: { 'x-real-ip': ip, ...headers }, body },
         res,
-        { stateStore, stationStore: stations, settingsStore, rateStore: rate, now: NOW },
+        { stateStore, stationStore: stations, settingsStore, rateStore: rate, lookupUser, now: NOW },
     );
     return res;
 }
@@ -126,9 +131,11 @@ async function station(name) {
     return (await call({ method: 'POST', a: 'station', headers: { cookie: admin() }, body: { name } })).body;
 }
 
-async function pairTo(token, stationId) {
-    const { body } = await call({ method: 'POST', a: 'pair', headers: bearer(token) });
-    return call({ method: 'POST', a: 'approve', headers: { cookie: admin() }, body: { code: body.c, station: stationId, label: 'Instinct' } });
+/** Pair a new watch; returns its server-issued token. */
+async function pairTo(stationId) {
+    const { body } = await call({ method: 'POST', a: 'pair' });
+    await call({ method: 'POST', a: 'approve', headers: { cookie: admin() }, body: { code: body.c, station: stationId, label: 'Instinct' } });
+    return body.k;
 }
 
 beforeEach(() => {
@@ -158,8 +165,10 @@ describe('pairing flow', () => {
     });
 
     it('pair → pending with code → admin approves → watch gets its station job', async () => {
-        const pair = await call({ method: 'POST', a: 'pair', headers: bearer(TOKEN) });
+        const pair = await call({ method: 'POST', a: 'pair' });
         expect(pair.body.c).toMatch(/^\d{6}$/);
+        expect(pair.body.k).toMatch(/^[A-Za-z0-9_-]{32}$/);
+        const TOKEN = pair.body.k;
 
         const pending = await call({ headers: bearer(TOKEN) });
         expect(pending.statusCode).toBe(403);
@@ -176,13 +185,24 @@ describe('pairing flow', () => {
         expect(read.body.h[0][0]).toBe('Amon');
     });
 
+    it('a waiting watch asking again keeps its token and gets a new code', async () => {
+        const first = await call({ method: 'POST', a: 'pair' });
+        const again = await call({ method: 'POST', a: 'pair', headers: bearer(first.body.k) });
+        expect(again.body.k).toBeUndefined();
+        expect(again.body.c).toMatch(/^\d{6}$/);
+    });
+
+    it('a client-made token is never accepted as a new identity', async () => {
+        const res = await call({ method: 'POST', a: 'pair', headers: bearer(TOKEN) });
+        expect(res.body.k).toBeDefined();
+        expect(res.body.k).not.toBe(TOKEN);
+    });
+
     it('two stations keep separate jobs', async () => {
-        const A = 'b'.repeat(32);
-        const B = 'c'.repeat(32);
         const s1 = await station('Saw 1');
         const s2 = await station('Saw 2');
-        await pairTo(A, s1.id);
-        await pairTo(B, s2.id);
+        const A = await pairTo(s1.id);
+        const B = await pairTo(s2.id);
         await call({ method: 'POST', a: 'send', headers: { cookie: workshop() }, body: { station: s1.id, holds: ['Amon'] } });
         await call({ method: 'POST', a: 'send', headers: { cookie: workshop() }, body: { station: s2.id, holds: ['Base 15'] } });
         expect((await call({ headers: bearer(A) })).body.s).toEqual(['Amon']);
@@ -199,20 +219,26 @@ describe('pairing flow', () => {
         expect(r.statusCode).toBe(429);
     });
 
-    it('pairing requests are limited per IP and in total', async () => {
-        for (let i = 0; i < 10; i++) {
-            await call({ method: 'POST', a: 'pair', headers: bearer(String(i).repeat(32)), ip: '9.9.9.9' });
+    it('pairing requests are limited per network; a flood evicts old requests instead of blocking', async () => {
+        for (let i = 0; i < 10; i++) await call({ method: 'POST', a: 'pair', ip: '2001:db8:9:9::' + i });
+        expect((await call({ method: 'POST', a: 'pair', ip: '2001:db8:9:9::ffff' })).statusCode).toBe(429);
+        for (let i = 0; i < MAX_PENDING_PAIRS + 5; i++) await call({ method: 'POST', a: 'pair', ip: `10.0.${i >> 8}.${i & 255}` });
+        const late = await call({ method: 'POST', a: 'pair', ip: '10.9.9.9' });
+        expect(late.statusCode).toBe(200);
+        expect(late.body.c).toMatch(/^\d{6}$/);
+        expect([...stations.st.devices.values()].filter((d) => !d.stationId).length).toBeLessThanOrEqual(MAX_PENDING_PAIRS);
+    });
+
+    it('unknown tokens are throttled per network', async () => {
+        for (let i = 0; i < MAX_UNKNOWN_TOKENS; i++) {
+            expect((await call({ headers: bearer(`${String(i).padStart(32, 'u')}`), ip: '198.51.100.7' })).statusCode).toBe(401);
         }
-        expect((await call({ method: 'POST', a: 'pair', headers: bearer('z'.repeat(32)), ip: '9.9.9.9' })).statusCode).toBe(429);
-        for (let i = 0; i < MAX_PENDING_PAIRS; i++) {
-            await call({ method: 'POST', a: 'pair', headers: bearer(`k${String(i).padStart(31, 'x')}`), ip: `10.0.0.${i}` });
-        }
-        expect((await call({ method: 'POST', a: 'pair', headers: bearer('q'.repeat(32)), ip: '10.1.1.1' })).body).toEqual({ e: 'busy' });
+        expect((await call({ headers: bearer('v'.repeat(32)), ip: '198.51.100.7' })).statusCode).toBe(429);
     });
 
     it('unpairing removes the watch', async () => {
         const st = await station('Saw 1');
-        await pairTo(TOKEN, st.id);
+        const TOKEN = await pairTo(st.id);
         const id = watchTokenHash({ headers: bearer(TOKEN) }).slice(0, 16);
         expect((await call({ method: 'POST', a: 'move', headers: { cookie: admin() }, body: { watch: id, station: null } })).statusCode).toBe(200);
         expect((await call({ headers: bearer(TOKEN) })).statusCode).toBe(401);
@@ -235,7 +261,7 @@ describe('web access to stations', () => {
 
     it('admin list includes paired watches', async () => {
         const st = await station('Saw 1');
-        await pairTo(TOKEN, st.id);
+        await pairTo(st.id);
         const list = await call({ a: 'stations', headers: { cookie: admin() } });
         expect(list.body.stations[0].watches).toHaveLength(1);
         expect(list.body.stations[0].watches[0].label).toBe('Instinct');

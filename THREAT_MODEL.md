@@ -26,7 +26,7 @@ Backend functions in `/api` talk to Neon Postgres. Browser code never receives
 | A3 | Session token | Medium | httpOnly `angles_session` cookie |
 | A3b | Workshop access token | Medium (read access) | httpOnly `angles_access` cookie, 30 days, key derived from `SESSION_SECRET`, bound to the code version |
 | A3c | Workshop code hash | Medium | Neon `settings` (scrypt) |
-| A3d | Watch tokens | Medium (read access) | On the watch; SHA-256 in Neon `watch_devices` |
+| A3d | Watch tokens | Medium (read access) | Server-issued; on the watch; SHA-256 in Neon `watch_devices` |
 | A4 | Change history | Low-Medium accountability data | Neon `change_log` |
 | A5 | Device-local work progress/theme/last-seen id | Low | Browser `localStorage` |
 | A6 | Server secrets | High | Vercel env: `DATABASE_URL`, `SESSION_SECRET`, `SETUP_TOKEN`, `BLOB_READ_WRITE_TOKEN` |
@@ -45,7 +45,7 @@ TB2: Browser -> Vercel Functions (/api)
     workshop or admin cookie; writes/history/settings need an admin session.
 
 TB2b: Watch -> phone -> Vercel Functions (/api/watch)
-    Bearer token generated on the watch; paired to a station by an admin.
+    Bearer token issued by the server at pairing; paired to a station by an admin.
 
 TB3: Vercel Functions -> Neon Postgres
     Server-only database access using DATABASE_URL.
@@ -168,7 +168,8 @@ Admin browser
 1. Login throttling fails open on a throttle-store outage (availability over strictness).
 2. Online-only dependency on Vercel Functions and Neon availability.
 3. Shared workshop code: rotate it when people leave (signs all devices out).
-4. Admin sessions are not revoked by a password change (12 h TTL; D18).
+4. Throttles fail open on a throttle-store outage, and a determined attacker
+   with many networks still gets the global cap of workshop-code guesses.
 5. Historical DB dump exposure was previously remediated, but public Git hosting
    cache/clone residuals should be treated as impossible to fully recall.
 

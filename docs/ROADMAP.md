@@ -65,7 +65,9 @@ behavior moved and the PR is wrong):
   onboarding guide helps fill an empty catalog. Admins change their password
   in SETTINGS (D4 / Identity).
 - **Stations and paired watches** — one job per station, watches paired with a
-  6-digit code and a token generated on the watch (closes D15).
+  6-digit code and a server-issued token (closes D15).
+- **Sessions follow the password** — changing it signs every other device out
+  (D18).
 - **Image storage** — covers and drawings in a private Vercel Blob store,
   served through the same access check (F6).
 - **Real stale-save merge** — three-way merge by hold/angle id; asks only on
@@ -77,8 +79,6 @@ behavior moved and the PR is wrong):
 
 - Repo hardening on the public repository: branch protection, required status
   checks, secret push-protection (D11 residual; GitHub UI).
-- Revoke admin sessions on password change (sessions are stateless 12 h tokens
-  today).
 - Live watch status on the website (last sync per watch is already stored).
 - Optional per-operator accounts instead of a shared workshop code, if the
   team grows.

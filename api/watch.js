@@ -1,9 +1,10 @@
 // Garmin watch + stations, one function:
 //
-// Watch (header `Authorization: Bearer <token>`, token generated on the watch):
+// Watch (header `Authorization: Bearer <token>`, token issued by ?a=pair):
 //   GET  /api/watch            → 200 { r, h, s, t, n }  catalog + its station's selection
 //                                401 { e: 'unpaired' } | 403 { e: 'pending', c: code }
-//   POST /api/watch?a=pair     → { c: code } six digits for the admin, valid 15 min
+//   POST /api/watch?a=pair     → { c: code, k: token } six digits for the admin (15 min) and
+//                                the watch's new token; with a waiting token: { c } only
 //
 // Web (admin session or workshop-code device):
 //   GET  /api/watch?a=stations → { stations: [{ id, name, sentAt, count, watches? }] } (watches: admin only)
@@ -23,11 +24,13 @@ import { neonSettingsStore } from './_lib/settingsStore.js';
 import { neonRateLimitStore } from './_lib/rateLimitStore.js';
 import { isRateLimited, rateLimitKey, recordFailure } from './_lib/rateLimit.js';
 import { canRead, resolveReader } from './_lib/access.js';
+import { getUserByUsername } from './_lib/db.js';
 import { getClientIp, PayloadTooLargeError, readJsonBody } from './_lib/http.js';
 
 export const MAX_SENT_HOLDS = 200;
 export const PAIR_TTL_MS = 15 * 60 * 1000;
-export const MAX_PENDING_PAIRS = 20;
+export const MAX_PENDING_PAIRS = 50;
+export const MAX_UNKNOWN_TOKENS = 30; // per network per 15 min
 const MAX_NAME = 40;
 
 export function toWatchCatalog(data) {
@@ -49,6 +52,10 @@ export function watchTokenHash(req) {
     return m ? crypto.createHash('sha256').update(m[1]).digest('hex') : null;
 }
 
+export function newWatchToken() {
+    return crypto.randomBytes(24).toString('base64url'); // 32 characters
+}
+
 export function newPairCode() {
     return String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
 }
@@ -57,9 +64,16 @@ const cleanName = (v) => (typeof v === 'string' ? v.trim().slice(0, MAX_NAME) : 
 const asId = (v) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null);
 
 async function watchRead(req, res, d) {
+    // unknown tokens are counted, so tokens cannot be guessed (or the DB hammered) in bulk
+    const key = rateLimitKey(getClientIp(req), 'watch-token');
+    if (await isRateLimited(d.rate, key, d.now, { maxFailures: MAX_UNKNOWN_TOKENS })) {
+        res.status(429).json({ e: 'slow_down' });
+        return;
+    }
     const tokenHash = watchTokenHash(req);
     const device = tokenHash ? await d.stations.findDevice(tokenHash) : null;
     if (!device) {
+        await recordFailure(d.rate, key, d.now);
         res.status(401).json({ e: 'unpaired' });
         return;
     }
@@ -80,29 +94,37 @@ async function watchRead(req, res, d) {
 }
 
 async function watchPair(req, res, d) {
-    const tokenHash = watchTokenHash(req);
-    if (!tokenHash) {
-        res.status(400).json({ e: 'token' });
-        return;
-    }
-    // Every pairing request counts against the IP, so the table cannot be flooded.
+    // Every pairing request counts against the network, so the table cannot be flooded.
     const key = rateLimitKey(getClientIp(req), 'watch-pair');
     if (await isRateLimited(d.rate, key, d.now, { maxFailures: 10 })) {
         res.status(429).json({ e: 'slow_down' });
         return;
     }
     await recordFailure(d.rate, key, d.now, { windowMs: PAIR_TTL_MS });
-    if ((await d.stations.countPending()) >= MAX_PENDING_PAIRS) {
-        res.status(429).json({ e: 'busy' });
-        return;
+
+    // A watch that is already waiting keeps its token and gets a fresh code;
+    // anything else gets a new server-made token (strong on every device).
+    let tokenHash = watchTokenHash(req);
+    let token = null;
+    if (!tokenHash || !(await d.stations.findDevice(tokenHash))) {
+        token = newWatchToken();
+        tokenHash = watchTokenHash({ headers: { authorization: `Bearer ${token}` } });
     }
-    const code = newPairCode();
-    const { alreadyPaired } = await d.stations.startPairing(tokenHash, code, d.now + PAIR_TTL_MS);
-    res.status(200).json(alreadyPaired ? { ok: true } : { c: code });
+    for (let attempt = 0; attempt < 5; attempt++) {
+        const code = newPairCode();
+        try {
+            const { alreadyPaired } = await d.stations.startPairing(tokenHash, code, d.now + PAIR_TTL_MS, MAX_PENDING_PAIRS);
+            res.status(200).json(alreadyPaired ? { ok: true } : { c: code, ...(token ? { k: token } : {}) });
+            return;
+        } catch (err) {
+            if (err?.code !== '23505') throw err; // code already shown by another waiting watch: draw again
+        }
+    }
+    res.status(503).json({ e: 'busy' });
 }
 
 async function webAction(req, res, d, action) {
-    const reader = await resolveReader(req.headers?.cookie, d.settings);
+    const reader = await resolveReader(req.headers?.cookie, d.settings, { lookupUser: d.lookupUser });
     if (!canRead(reader)) {
         res.status(401).json({ error: 'locked' });
         return;
@@ -207,6 +229,7 @@ export async function handleWatch(req, res, opts = {}) {
         stations: opts.stationStore ?? neonStationStore,
         settings: opts.settingsStore ?? neonSettingsStore,
         rate: opts.rateStore ?? neonRateLimitStore,
+        lookupUser: opts.lookupUser ?? getUserByUsername,
         now: opts.now ?? Date.now(),
     };
     const action = req.query?.a;

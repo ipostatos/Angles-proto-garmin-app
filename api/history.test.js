@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { handleHistory } from './history.js';
 import { signSession, buildSessionCookie } from './_lib/session.js';
+import { fakeAdmin } from './_lib/fakeAdmin.js';
 
 function mockRes() {
     return {
@@ -39,14 +40,43 @@ describe('/api/history route', () => {
                 return rows;
             },
         };
-        const token = signSession('Tomek', { secret: 'test-secret' });
-        const cookie = buildSessionCookie(token, { secret: 'test-secret', secure: false });
+        const { cookie, lookupUser } = fakeAdmin('Tomek', 'test-secret');
         const res = mockRes();
         await handleHistory(
             { method: 'GET', headers: { cookie }, query: { limit: '50' } },
             res,
             store,
+            { lookupUser },
         );
+        expect(res.statusCode).toBe(200);
+        expect(res.body.rows).toEqual(rows);
+    });
+
+    it('rejects a session opened before a password change', async () => {
+        process.env.SESSION_SECRET = 'test-secret';
+        const cookie = buildSessionCookie(signSession('Tomek', { secret: 'test-secret', fp: 'old-fingerprint' }), { secure: false });
+        const { lookupUser } = fakeAdmin('Tomek', 'test-secret');
+        const res = mockRes();
+        await handleHistory({ method: 'GET', headers: { cookie }, query: {} }, res, explodingStore, { lookupUser });
+        expect(res.statusCode).toBe(401);
+    });
+
+    it('rejects a session without a password fingerprint (pre-2.0 cookie)', async () => {
+        process.env.SESSION_SECRET = 'test-secret';
+        const cookie = buildSessionCookie(signSession('Tomek', { secret: 'test-secret' }), { secure: false });
+        const { lookupUser } = fakeAdmin('Tomek', 'test-secret');
+        const res = mockRes();
+        await handleHistory({ method: 'GET', headers: { cookie }, query: {} }, res, explodingStore, { lookupUser });
+        expect(res.statusCode).toBe(401);
+    });
+
+    it('keeps the original assertion shape', async () => {
+        const rows = [];
+        const store = { async readHistory() { return rows; } };
+        process.env.SESSION_SECRET = 'test-secret';
+        const { cookie, lookupUser } = fakeAdmin('Tomek', 'test-secret');
+        const res = mockRes();
+        await handleHistory({ method: 'GET', headers: { cookie }, query: {} }, res, store, { lookupUser });
         expect(res.statusCode).toBe(200);
         expect(res.body.rows).toEqual(rows);
     });

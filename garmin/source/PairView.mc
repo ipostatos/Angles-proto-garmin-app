@@ -42,6 +42,7 @@ class PairView extends WatchUi.View {
         }
     }
 
+
     function update(error as String or Null) as Void {
         _error = error;
         WatchUi.requestUpdate();

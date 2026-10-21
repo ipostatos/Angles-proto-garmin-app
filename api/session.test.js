@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { handleSession } from './session.js';
-import { signSession, buildSessionCookie } from './_lib/session.js';
+import { fakeAdmin } from './_lib/fakeAdmin.js';
 
 function mockRes() {
     return {
@@ -33,10 +33,9 @@ describe('/api/session', () => {
         process.env.SESSION_SECRET = 'test-secret';
         const latestChange = { id: 12, username: 'Alessandro', createdAt: '2026-06-08T12:00:00.000Z' };
         const store = { async readLatestChange() { return latestChange; } };
-        const token = signSession('Tomek', { secret: 'test-secret' });
-        const cookie = buildSessionCookie(token, { secure: false });
+        const { cookie, lookupUser } = fakeAdmin('Tomek', 'test-secret');
         const res = mockRes();
-        await handleSession({ method: 'GET', headers: { cookie } }, res, store);
+        await handleSession({ method: 'GET', headers: { cookie } }, res, store, { lookupUser });
         expect(res.statusCode).toBe(200);
         expect(res.body).toEqual({ username: 'Tomek', latestChange });
     });

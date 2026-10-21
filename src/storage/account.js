@@ -36,4 +36,4 @@ export const runSetup = (fields) => post('setup', fields);
 export const unlockWorkshop = (code) => post('unlock', { code });
 export const lockDevice = () => post('lock');
 export const changePassword = (currentPassword, newPassword) => post('password', { currentPassword, newPassword });
-export const setWorkshopCode = (code) => post('workshop-code', { code });
+export const setWorkshopCode = (code, currentPassword) => post('workshop-code', { code, currentPassword });

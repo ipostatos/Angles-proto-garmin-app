@@ -90,9 +90,9 @@ round subscreen never covers a row.
 ## Sync, pairing and stations
 
 The watch talks to the server only through the phone (Garmin Connect +
-Bluetooth). It identifies itself with a random token made on first start; the
-server stores only its SHA-256 and answers nothing until an admin has paired
-the token to a **station**.
+Bluetooth). It identifies itself with a random token the server issues when
+pairing starts; the server stores only its SHA-256 and answers nothing until an
+admin has paired the token to a **station**.
 
 1. On the website select holds, press **⌚** and pick the station.
 2. The server stores the job for that station (`POST /api/watch?a=send`).
@@ -112,7 +112,7 @@ operators: [`../docs/MULTI_OPERATOR.md`](../docs/MULTI_OPERATOR.md).
 | `GET /api/watch` (paired) | `200 { "r": 7, "h": [["Amon", [24.7, 39.8], [32, 39.8]], ...], "s": ["Amon"], "t": 1790939847, "n": "Saw 1" }` |
 | `GET /api/watch` (unknown token) | `401 { "e": "unpaired" }` |
 | `GET /api/watch` (waiting) | `403 { "e": "pending", "c": "123456" }` |
-| `POST /api/watch?a=pair` | `200 { "c": "123456" }` (valid 15 min) |
+| `POST /api/watch?a=pair` | `200 { "c": "123456", "k": "<token>" }` (code valid 15 min; a waiting watch gets only a new `c`) |
 
 `h` — catalog rows `[name, [main], [stefan]]` (no images, ~3.5 KB);
 `s` — hold names of this station's job; `t` — send time in unix **seconds**
@@ -123,8 +123,8 @@ operators: [`../docs/MULTI_OPERATOR.md`](../docs/MULTI_OPERATOR.md).
 - **Pairing:** PAIR WATCH screen with a 6-digit code; it polls every 5 s and
   shows PAIRED with the station name when the admin approves. START asks again
   (new code if the old one expired).
-- **Token:** every request carries the watch token; an unknown watch gets no
-  catalog.
+- **Token:** issued by the server with the pairing code and sent with every
+  request; an unknown watch gets no catalog.
 - **Station name** under FROM PHONE.
 - **No AVA data in the build:** the bundled offline catalog is empty by
   default; the real catalog arrives on the first sync after pairing.

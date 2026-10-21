@@ -1,7 +1,7 @@
 // POST /api/login  { username, password } → sets session cookie, returns { username }
 import { getUserByUsername } from './_lib/db.js';
 import { authenticateUser, normalizeLoginUsername } from './_lib/auth.js';
-import { signSession, buildSessionCookie } from './_lib/session.js';
+import { signSession, buildSessionCookie, passwordFingerprint } from './_lib/session.js';
 import { PayloadTooLargeError, getClientIp, readJsonBody } from './_lib/http.js';
 import { neonRateLimitStore } from './_lib/rateLimitStore.js';
 import {
@@ -39,7 +39,8 @@ export async function handleLogin(req, res, opts = {}) {
             return;
         }
         await clearFailures(rateStore, key);
-        const token = signSession(username);
+        const user = await lookupUser(username);
+        const token = signSession(username, { fp: passwordFingerprint(user.pass_hash) });
         res.setHeader('Set-Cookie', buildSessionCookie(token));
         res.status(200).json({ username });
     } catch (err) {

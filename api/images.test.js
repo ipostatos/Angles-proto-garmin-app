@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { handleImages, decodeDataUrl, IMAGE_PATH_RE } from './images.js';
-import { buildSessionCookie, signSession } from './_lib/session.js';
+import { fakeAdmin } from './_lib/fakeAdmin.js';
 import { ACCESS_COOKIE, signAccess } from './_lib/access.js';
 import { isSafeImageSrc } from '../src/domain/migration.js';
 
@@ -35,13 +35,14 @@ function memoryBlob() {
     };
 }
 
-const admin = () => buildSessionCookie(signSession('Tomek', { secret: SECRET }), { secure: false });
+const admin = () => fakeAdmin('Tomek', SECRET).cookie;
+const lookupUser = fakeAdmin('Tomek', SECRET).lookupUser;
 const workshop = () => `${ACCESS_COOKIE}=${signAccess(1, { secret: SECRET })}`;
 const ENV = { BLOB_READ_WRITE_TOKEN: 'x' };
 
 async function call(req, blob, env = ENV) {
     const res = mockRes();
-    await handleImages({ headers: {}, ...req }, res, { blob, settingsStore, env });
+    await handleImages({ headers: {}, ...req }, res, { blob, settingsStore, env, lookupUser });
     return res;
 }
 
