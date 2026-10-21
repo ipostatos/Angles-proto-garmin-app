@@ -41,15 +41,11 @@ export function isSafeImageSrc(s) {
 
 export const LS_VERSION = 1;
 
-export const DEFAULT_HOLDS = ['Anton'];
+// A fresh install starts empty: the first-run screen and the onboarding
+// guide lead the admin to add holds, angles and drawings.
+export const DEFAULT_HOLDS = [];
 
-export const DEFAULT_ANGLES = [
-    { id: cryptoRandomId(), hold: 'Austin', value: 40, saw: 'main' },
-    { id: cryptoRandomId(), hold: 'Avalon Flat', value: 40, saw: 'main' },
-    { id: cryptoRandomId(), hold: 'Austin', value: 40, saw: 'main' },
-    { id: cryptoRandomId(), hold: 'Avalon SuperFlat', value: 40, saw: 'stefan' },
-    { id: cryptoRandomId(), hold: 'Amon', value: 40, saw: 'stefan' },
-];
+export const DEFAULT_ANGLES = [];
 
 function clamp(n, a, b) {
     return Math.max(a, Math.min(b, n));
