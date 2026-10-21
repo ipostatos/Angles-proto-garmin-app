@@ -1,23 +1,50 @@
-# Angles
+# Angles-proto + Garmin app
 
-> Saw-angle reference tool for production workshops: select products, compare MAIN and STEFAN cut angles, print reference sheets, and manage a shared catalog.
+> Saw-angle reference tool for the AVA Volumes workshop: a shared web catalog of cut angles for climbing holds and volumes, a phone work mode, printable sheets, and a **Garmin watch app** that shows the next angle on the operator's wrist.
 
-[![Version](https://img.shields.io/badge/version-v1.5-brightgreen?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/web-v1.5-brightgreen?style=flat-square)](CHANGELOG.md)
+[![Garmin app](https://img.shields.io/badge/Garmin%20app-v1.1-007CC3?style=flat-square&logo=garmin&logoColor=white)](garmin/README.md)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-avacut.vercel.app-black?style=flat-square&logo=vercel)](https://avacut.vercel.app)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
-[![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev)
+[![Monkey C](https://img.shields.io/badge/Connect%20IQ-Monkey%20C-111?style=flat-square)](garmin/)
 [![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-000?style=flat-square&logo=vercel)](https://vercel.com)
 [![License](https://img.shields.io/badge/license-proprietary-lightgrey?style=flat-square)](#license)
 
-**Current version: v1.5** — see the [changelog](CHANGELOG.md) and [release notes](docs/RELEASE_NOTES.md).
+**Current versions: web v1.5, Garmin app v1.1** — see the [changelog](CHANGELOG.md) and [release notes](docs/RELEASE_NOTES.md).
+
+<p align="center">
+  <img src="garmin/docs/screenshots/flow-big-mode.png" width="820" alt="Garmin app BIG MODE: open angle, cut (green), automatic jump, missed angle (red)">
+</p>
 
 ---
 
+## Why it exists
+
+AVA Volumes builds climbing holds and volumes from plywood panels. The panel
+edges are cut at bevel angles, a single hold needs many of them, and a job is
+usually several holds at once. Angles replaces printed lists and memory with:
+
+1. **One shared catalog** of every hold and its angles, edited by named admins
+   with a change history.
+2. **One merged, sorted cut list** for the holds of the current job, split by
+   saw set-up (**MAIN** and **STEFAN**).
+3. **Tick-off progress** at the saw: on a phone (work mode) or on a Garmin
+   watch, where one button press marks the cut and jumps to the next angle.
+
+The app is used daily on the workshop floor.
+
 ## What It Does
 
-Angles is an online workshop reference app. Operators can select one or more products, view their saw angles for **MAIN** and **STEFAN**, open the cutting drawing for a row, use a phone-friendly work mode, and print A4 reference sheets.
+Operators select one or more holds, see their angles for **MAIN** (normal
+clamping beam, panel flat, up to 45°) and **STEFAN** (clamping beam that holds
+the blank vertically, for edges steeper than 45°), open the cutting drawing for
+a row, use a phone-friendly work mode, print A4 reference sheets, or send the
+selection to the watch.
 
 Admins sign in as a named user and edit one shared catalog stored in Neon Postgres through same-origin Vercel Functions. Every successful catalog save is revision-locked and logged to a change history.
+
+How the two set-ups work and how angles above 45° are cut on a saw whose blade
+tilts only to 45°: [`docs/CUTTING.md`](docs/CUTTING.md).
 
 ---
 
@@ -36,7 +63,7 @@ Admins sign in as a named user and edit one shared catalog stored in Neon Postgr
 | **Change notification** | Logged-in users are notified when another user changed the database |
 | **Work mode** | Device-local progress for checked angles and work theme |
 | **Import / Export** | Export JSON backups; import stages a draft that is persisted on SAVE |
-| **Garmin watch app** | Angles of selected holds on the wrist: BIG MODE, colored list, saved progress — see [`garmin/README.md`](garmin/README.md) |
+| **Garmin watch app** | Angles of selected holds on the wrist: BIG MODE, colored list, auto-jump with vibration after each cut, saved progress — see [`garmin/README.md`](garmin/README.md) |
 | **Send to watch** | ⌚ button next to print sends the selected holds to the watch via `/api/watch` |
 
 ---
@@ -49,13 +76,14 @@ Admins sign in as a named user and edit one shared catalog stored in Neon Postgr
 - **httpOnly HMAC session cookie** for admin sessions
 - **localStorage** only for device-local UI state such as work progress, work theme, and last-seen change id
 - **react-hot-toast** for notifications
+- **Connect IQ / Monkey C** for the Garmin watch app (`garmin/`)
 
 ---
 
 ## Project Structure
 
 ```text
-angles-proto/
+Angles-proto-garmin-app/
 ├── api/                 # Vercel Functions (auth, state, history) + _lib shared logic
 │   ├── _lib/            # auth, session, db, stateService, rateLimit, schema.sql
 │   ├── login.js  logout.js  session.js
@@ -72,7 +100,7 @@ angles-proto/
 │   └── contexts/ hooks/ constants/ styles/ assets/
 ├── garmin/              # Connect IQ watch app (Monkey C) — see garmin/README.md
 ├── scripts/             # db-setup.mjs, seed-users.mjs
-├── docs/                # ARCHITECTURE, DEVELOPMENT, ROADMAP, RELEASE_NOTES, OPERATIONS
+├── docs/                # CUTTING, ARCHITECTURE, DEVELOPMENT, ROADMAP, RELEASE_NOTES, OPERATIONS, screenshots/
 ├── public/              # static assets
 ├── vercel.json          # security headers + routing
 └── vite.config.js
@@ -158,25 +186,32 @@ Open `/#/admin` or click **ADMIN** in the app.
 
 ## Screenshots
 
-> **Screenshots are not yet checked into the repo.** Add them under
-> `docs/screenshots/` (create the folder) and reference them here. A live
-> instance is available at [avacut.vercel.app](https://avacut.vercel.app).
+**Web** (live at [avacut.vercel.app](https://avacut.vercel.app)):
 
-Recommended screenshots to add:
+| Desktop: two holds selected, MAIN and STEFAN tables | Phone work mode |
+|---|---|
+| <img src="docs/screenshots/web-desktop.png" width="560"> | <img src="docs/screenshots/web-phone-work.png" width="220"> |
 
-- [ ] Operator dual-table view (MAIN + STEFAN)
-- [ ] Drawing viewer with zoom
-- [ ] A4 print mode
-- [ ] Admin catalog editing
-- [ ] Change history view
-- [ ] Phone work mode with green/red row indicators
+**Garmin watch** (Instinct 3 AMOLED 45mm simulator):
 
-<!--
-Example once added:
+| Holds | BIG MODE | Cut | LIST | About |
+|---|---|---|---|---|
+| <img src="garmin/docs/screenshots/holds.png" width="150"> | <img src="garmin/docs/screenshots/big-open.png" width="150"> | <img src="garmin/docs/screenshots/big-cut.png" width="150"> | <img src="garmin/docs/screenshots/list.png" width="150"> | <img src="garmin/docs/screenshots/about.png" width="150"> |
 
-![Operator view](docs/screenshots/operator.png)
-![Admin panel](docs/screenshots/admin.png)
--->
+---
+
+## Garmin watch app
+
+At the saw both hands are busy, so the next angle lives on the wrist:
+
+1. Select holds on the website and press **⌚ Send to watch** (or tick them on the watch).
+2. Open **BIG MODE**: one angle per screen, set-up on top, hold name below.
+3. Set the saw, cut, press **START**: the screen turns green, the watch buzzes
+   once and jumps to the next open angle by itself.
+4. A skipped angle turns red and the press that skipped it buzzes twice.
+5. Progress is saved on the watch; without the phone it works on its last copy.
+
+Details, buttons, build and sideload: [`garmin/README.md`](garmin/README.md).
 
 ---
 
@@ -245,6 +280,7 @@ trade-offs are covered in [Security](#security) above.
   `SESSION_SECRET` (Production-only).
 - **Mobile CSS is fragile** (`!important` media-query overrides); verify on a
   narrow viewport after layout changes.
+- Workshop context (MAIN / STEFAN, cuts above 45°): [`docs/CUTTING.md`](docs/CUTTING.md).
 - Backup/restore: [`docs/OPERATIONS.md`](docs/OPERATIONS.md). Architecture:
   [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Dev setup:
   [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).

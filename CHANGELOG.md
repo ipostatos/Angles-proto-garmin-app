@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. This project loosely
 follows [Semantic Versioning](https://semver.org/).
 
+## Garmin app v1.1
+
+### Added
+- Auto-advance after a cut (BIG MODE and LIST): the angle stays green for
+  0.7 s, then one short vibration and a jump to the next open angle. A second
+  START skips the wait; moving by hand or leaving cancels it. With nothing open
+  below, the jump goes back to the first missed angle.
+- ALL DONE with one long vibration when the last angle is cut.
+- ABOUT item on the holds screen: saw blade icon, version 1.1 and a short
+  description. App version set in the manifest (`1.1.0`).
+- Docs: `docs/CUTTING.md` (MAIN / STEFAN set-ups, cutting angles above 45°),
+  web and watch screenshots, rewritten README and `garmin/README.md`.
+
+### Changed
+- Launcher icon: a saw blade with teeth instead of the angle sign
+  (`garmin/tools/build-icon.py`).
+- Repository renamed to `Angles-proto-garmin-app`.
+
 ## Unreleased
 
 ### Added
