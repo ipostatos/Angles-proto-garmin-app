@@ -3,15 +3,26 @@ import Toybox.Lang;
 import Toybox.WatchUi;
 
 // One angle per screen: saw on top, big angle in the middle, hold below.
-// START = cut (green) and jump to the next open angle; UP/DOWN = browse.
+// START = cut (green), a short pulse and an automatic jump to the next
+// open angle; UP/DOWN = browse.
 class BigView extends WatchUi.View {
     var index as Number;
+    var advance as AutoAdvance = new AutoAdvance();
     hidden var _p as Progress;
 
     function initialize(p as Progress) {
         View.initialize();
         _p = p;
         index = p.firstOpen();
+    }
+
+    function onHide() as Void {
+        advance.cancel();
+    }
+
+    function jumpNext() as Void {
+        index = _p.nextOpen(index);
+        WatchUi.requestUpdate();
     }
 
     function onUpdate(dc as Graphics.Dc) as Void {
@@ -35,7 +46,7 @@ class BigView extends WatchUi.View {
 
         dc.drawText(w / 2, h * 0.72, Graphics.FONT_MEDIUM, e[2] as String,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        var mark = _p.isDone(index) ? "OK  " : (_p.isMissed(index) ? "MISSED  " : "");
+        var mark = _p.allDone() ? "ALL DONE  " : (_p.isDone(index) ? "OK  " : (_p.isMissed(index) ? "MISSED  " : ""));
         dc.drawText(w / 2, h * 0.87, Graphics.FONT_XTINY, mark + (index + 1) + "/" + _p.entries.size(),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
@@ -52,16 +63,25 @@ class BigDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onSelect() as Boolean {
+        if (_v.advance.pending()) {
+            _v.advance.fire();
+            return true;
+        }
         var wasDone = _p.isDone(_v.index);
-        _p.toggle(_v.index);
+        var warned = _p.toggle(_v.index);
         if (!wasDone) {
-            _v.index = _p.nextOpen(_v.index);
+            if (_p.allDone()) {
+                pulseAllDone();
+            } else {
+                _v.advance.start(_v.method(:jumpNext), warned);
+            }
         }
         WatchUi.requestUpdate();
         return true;
     }
 
     function onNextPage() as Boolean {
+        _v.advance.cancel();
         if (_v.index < _p.entries.size() - 1) {
             _v.index++;
             WatchUi.requestUpdate();
@@ -71,12 +91,14 @@ class BigDelegate extends WatchUi.BehaviorDelegate {
 
     // Hold UP (MENU): back to the first angle.
     function onMenu() as Boolean {
+        _v.advance.cancel();
         _v.index = 0;
         WatchUi.requestUpdate();
         return true;
     }
 
     function onPreviousPage() as Boolean {
+        _v.advance.cancel();
         if (_v.index > 0) {
             _v.index--;
             WatchUi.requestUpdate();

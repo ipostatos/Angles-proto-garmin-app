@@ -5,12 +5,13 @@ import Toybox.WatchUi;
 
 // Start screen: actions on top, then every hold with a checkbox.
 // Picks are saved on each change.
-const ACTIONS = ["BIG MODE", "LIST", "RESET PROGRESS", "RESET HOLDS", "FROM PHONE"];
+const ACTIONS = ["BIG MODE", "LIST", "RESET PROGRESS", "RESET HOLDS", "FROM PHONE", "ABOUT"];
 const A_BIG = 0;
 const A_LIST = 1;
 const A_RESET = 2;
 const A_RESET_HOLDS = 3;
 const A_SYNC = 4;
+const A_ABOUT = 5;
 
 class HoldsView extends ScrollList {
     hidden var _catalog as Array;
@@ -22,7 +23,7 @@ class HoldsView extends ScrollList {
         _catalog = catalog;
         var p = Storage.getValue("picked");
         _picked = p instanceof Array ? p : [];
-        _subs = [null, null, "clear cut marks", "untick all holds", "get holds sent from site"];
+        _subs = [null, null, "clear cut marks", "untick all holds", "get holds sent from site", "version " + APP_VERSION];
     }
 
     function onShow() as Void {
@@ -96,6 +97,10 @@ class HoldsView extends ScrollList {
         if (index == A_SYNC) {
             setSyncStatus("loading...");
             syncFromPhone();
+            return;
+        }
+        if (index == A_ABOUT) {
+            WatchUi.pushView(new AboutView(), new WatchUi.BehaviorDelegate(), WatchUi.SLIDE_LEFT);
             return;
         }
         var rows = pickedRows();

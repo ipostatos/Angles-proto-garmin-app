@@ -7,6 +7,7 @@ import Toybox.WatchUi;
 // Catalog row: [name, [main angles], [stefan angles]]
 // Response: { h: catalog, s: [hold names sent from the web], t: sentAt seconds }
 const CATALOG_URL = "https://avacut.vercel.app/api/watch";
+const APP_VERSION = "1.1";
 
 // The hold menu currently on screen (null while angles are shown).
 var gHoldsView as HoldsView or Null = null;

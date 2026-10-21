@@ -2,6 +2,7 @@ import Toybox.Attention;
 import Toybox.Application.Storage;
 import Toybox.Lang;
 import Toybox.Math;
+import Toybox.Timer;
 
 // Flat cut list for the picked holds + "done" marks saved on the watch,
 // so leaving the app or pressing Back never loses progress.
@@ -47,7 +48,8 @@ class Progress {
         return _done.indexOf(entries[i][3]) >= 0;
     }
 
-    function toggle(i as Number) as Void {
+    // Returns true when the skip warning was played.
+    function toggle(i as Number) as Boolean {
         var key = entries[i][3];
         if (_done.indexOf(key) >= 0) {
             _done.remove(key);
@@ -57,7 +59,9 @@ class Progress {
         Storage.setValue("done", _done);
         if (isDone(i) && hasOpenBefore(i)) {
             warnSkipped();
+            return true;
         }
+        return false;
     }
 
     // An earlier angle of the same saw is still not cut.
@@ -92,14 +96,18 @@ class Progress {
         return isMissed(i) ? 0xC00000 : 0x000000;
     }
 
-    // First not-done index after i; otherwise just the next one.
+    // First not-done index after i; otherwise the first open one above.
     function nextOpen(i as Number) as Number {
         for (var j = i + 1; j < entries.size(); j++) {
             if (!isDone(j)) {
                 return j;
             }
         }
-        return i < entries.size() - 1 ? i + 1 : i;
+        return firstOpen();
+    }
+
+    function allDone() as Boolean {
+        return doneCount() == entries.size();
     }
 
     function doneCount() as Number {
@@ -130,6 +138,66 @@ function warnSkipped() as Void {
             new Attention.VibeProfile(0, 150),
             new Attention.VibeProfile(100, 250)
         ]);
+    }
+}
+
+// One short pulse: angle cut, moving on to the next one.
+function pulseNext() as Void {
+    if (Attention has :vibrate) {
+        Attention.vibrate([new Attention.VibeProfile(80, 120)]);
+    }
+}
+
+// One long pulse: every angle of the job is cut.
+function pulseAllDone() as Void {
+    if (Attention has :vibrate) {
+        Attention.vibrate([new Attention.VibeProfile(100, 700)]);
+    }
+}
+
+// How long a freshly cut angle stays green before the jump.
+const ADVANCE_MS = 700;
+
+// After a cut: keep the green row for a moment, pulse, then jump.
+// A second START skips the wait; moving by hand or leaving cancels it.
+class AutoAdvance {
+    hidden var _timer as Timer.Timer or Null = null;
+    hidden var _jump as Method or Null = null;
+    hidden var _quiet as Boolean = false;
+
+    function initialize() {
+    }
+
+    // quiet: the skip warning is already buzzing, so no extra pulse.
+    function start(jump as Method, quiet as Boolean) as Void {
+        cancel();
+        _jump = jump;
+        _quiet = quiet;
+        _timer = new Timer.Timer();
+        _timer.start(method(:fire), ADVANCE_MS, false);
+    }
+
+    function pending() as Boolean {
+        return _jump != null;
+    }
+
+    function fire() as Void {
+        var jump = _jump;
+        cancel();
+        if (jump != null) {
+            if (!_quiet) {
+                pulseNext();
+            }
+            jump.invoke();
+        }
+    }
+
+    function cancel() as Void {
+        if (_timer != null) {
+            _timer.stop();
+        }
+        _timer = null;
+        _jump = null;
     }
 }
 

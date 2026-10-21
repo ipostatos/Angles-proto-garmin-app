@@ -3,8 +3,10 @@ import Toybox.Lang;
 import Toybox.WatchUi;
 
 // Colored list of all angles: green = cut, red = skipped.
-// START marks / unmarks the focused angle.
+// START marks / unmarks the focused angle; after a cut the focus jumps
+// to the next open angle (same auto-advance as BIG MODE).
 class AnglesView extends ScrollList {
+    var advance as AutoAdvance = new AutoAdvance();
     hidden var _p as Progress;
     hidden var _rows as Array = [];   // entry index, or saw name for a header
 
@@ -65,10 +67,43 @@ class AnglesView extends ScrollList {
     }
 
     function select() as Void {
+        if (advance.pending()) {
+            advance.fire();
+            return;
+        }
         var row = _rows[index];
         if (row instanceof Number) {
-            _p.toggle(row);
+            var wasDone = _p.isDone(row);
+            var warned = _p.toggle(row);
+            if (!wasDone) {
+                if (_p.allDone()) {
+                    pulseAllDone();
+                } else {
+                    advance.start(method(:jumpNext), warned);
+                }
+            }
             WatchUi.requestUpdate();
         }
+    }
+
+    // Focus the row of the next open angle.
+    function jumpNext() as Void {
+        var row = _rows[index];
+        if (row instanceof Number) {
+            var target = _rows.indexOf(_p.nextOpen(row));
+            if (target >= 0) {
+                index = target;
+            }
+        }
+        WatchUi.requestUpdate();
+    }
+
+    function move(step as Number) as Void {
+        advance.cancel();
+        ScrollList.move(step);
+    }
+
+    function onHide() as Void {
+        advance.cancel();
     }
 }

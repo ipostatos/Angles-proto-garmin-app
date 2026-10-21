@@ -3,6 +3,14 @@
 Narrative summary of releases. For the itemized list, see
 [`../CHANGELOG.md`](../CHANGELOG.md).
 
+## Garmin app v1.1 — hands-free rhythm at the saw
+
+Cut, press START, and the watch does the rest: the angle turns green, the
+watch buzzes once and the next open angle is already on the screen. Skips
+still buzz twice and show red; the end of the job is one long buzz and
+ALL DONE. The app has an ABOUT screen with its version and a new saw blade
+icon. Workshop background: [`CUTTING.md`](CUTTING.md).
+
 ## Unreleased — Garmin watch
 
 Angles now runs on a Garmin watch. Select holds on the website, press **⌚**
