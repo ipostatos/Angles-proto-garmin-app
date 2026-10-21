@@ -427,3 +427,43 @@ describe('Send to watch picks a station (v2.0)', () => {
         await waitFor(() => expect(sent).toEqual([{ station: 2, holds: ['Austin'] }]));
     });
 });
+
+describe('Stale save merge (v2.0)', () => {
+    it('combines my new hold with a hold another admin saved meanwhile', async () => {
+        const puts = [];
+        let stateGets = 0;
+        const theirs = {
+            data: { ...sampleBody.data, holds: [...sampleBody.data.holds, { id: 'h9', name: 'Their Hold' }] },
+            revision: 3,
+        };
+        globalThis.fetch = vi.fn((url, init = {}) => {
+            const method = init.method || 'GET';
+            const json = (body, ok = true, status = 200) => Promise.resolve({ ok, status, json: () => Promise.resolve(body) });
+            if (url === '/api/session') return json({ username: 'Tomek', latestChange: null });
+            if (url === '/api/state' && method === 'GET') return json(++stateGets === 1 ? sampleBody : theirs);
+            if (url === '/api/state' && method === 'PUT') {
+                const body = JSON.parse(init.body);
+                puts.push(body);
+                if (body.revision === 2) return json({ error: 'stale_revision', currentRevision: 3 }, false, 409);
+                return json({ data: body.data, revision: 4, changes: 1 });
+            }
+            return Promise.reject(new Error(`unexpected fetch: ${method} ${url}`));
+        });
+        render(<App />);
+        await waitFor(() => expect(screen.getAllByText('MAIN').length).toBeGreaterThan(0));
+        act(() => { window.location.hash = '#/admin'; });
+        flushHash();
+        await waitFor(() => expect(screen.getByText('EXPORT')).toBeTruthy());
+
+        fireEvent.change(screen.getByPlaceholderText('NEW'), { target: { value: 'My Hold' } });
+        fireEvent.click(screen.getByRole('button', { name: '+' }));
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /save/i }));
+        });
+
+        await waitFor(() => expect(puts).toHaveLength(2));
+        expect(puts[1].revision).toBe(3);
+        const names = puts[1].data.holds.map((h) => h.name).sort();
+        expect(names).toEqual(['Austin', 'My Hold', 'Their Hold']);
+    });
+});

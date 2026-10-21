@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { AdminSettings } from '../features/admin/AdminSettings.jsx';
 import { AdminStations } from '../features/admin/AdminStations.jsx';
 import { AdminImages } from '../features/admin/AdminImages.jsx';
+import { MergeConflictDialog } from '../features/admin/MergeConflictDialog.jsx';
+import { mergeCatalogs } from '../domain/merge.js';
 import toast from 'react-hot-toast';
 import { clamp, toAngleLabel } from '../domain/angles.js';
 import { getSortedHoldNames, generateHoldId, migrateAndSanitize } from '../domain/migration.js';
-import { saveState, MAX_DB_SIZE_KB, serializedSizeKB } from '../storage/db.js';
+import { loadState, saveState, MAX_DB_SIZE_KB, serializedSizeKB } from '../storage/db.js';
 import { pushBackup } from '../storage/backups.js';
 import { downloadJsonFile, readJsonFile } from '../storage/importExport.js';
 import { loadHistory } from '../storage/history.js';
@@ -263,30 +265,72 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
         if (adminView === "history") onHistoryViewed?.();
     }, [adminView, onHistoryViewed]);
 
+    // Pending choice when a stale save has conflicting edits: { conflicts, mine, theirs, revision }.
+    const [mergeState, setMergeState] = useState(null);
+
+    const applySaved = useCallback((saved, message) => {
+        setData(saved.data);
+        onCatalogSaved?.(saved);
+        setDraftData(saved.data);
+        setHasUnsavedChanges(false);
+        if (adminView === "history") refreshHistory();
+        toast.success(message);
+    }, [adminView, onCatalogSaved, refreshHistory, setData]);
+
+    const reportSaveError = useCallback((err) => {
+        console.warn("Shared save failed:", err);
+        if (err?.status === 409 || err?.code === "stale_revision") {
+            toast.error("The catalog changed again while saving. Press SAVE once more.", { duration: 7000 });
+        } else if (err?.status === 401) {
+            toast.error("Session expired. Please sign in again.");
+        } else {
+            toast.error("Could not save the catalog. Please try again.");
+        }
+    }, []);
+
     const handleSave = useCallback(async () => {
         if (saving) return;
         setSaving(true);
         try {
             const saved = await saveState(draftData, serverRevision);
-            setData(saved.data);
-            onCatalogSaved?.(saved);
-            setDraftData(saved.data);
-            setHasUnsavedChanges(false);
-            if (adminView === "history") refreshHistory();
-            toast.success("Catalog saved");
+            applySaved(saved, "Catalog saved");
         } catch (err) {
-            console.warn("Shared save failed:", err);
             if (err?.status === 409 || err?.code === "stale_revision") {
-                toast.error("The catalog changed elsewhere. Reload the page and reapply your edit.", { duration: 7000 });
-            } else if (err?.status === 401) {
-                toast.error("Session expired. Please sign in again.");
+                // Someone saved meanwhile: merge my edits onto the latest version.
+                try {
+                    const latest = await loadState();
+                    const merged = mergeCatalogs(data, draftData, latest.data);
+                    if (merged.conflicts.length === 0) {
+                        const saved = await saveState(merged.mine, latest.revision);
+                        applySaved(saved, "Saved and combined with changes made by another admin");
+                    } else {
+                        setMergeState({ ...merged, revision: latest.revision });
+                    }
+                } catch (mergeErr) {
+                    reportSaveError(mergeErr);
+                }
             } else {
-                toast.error("Could not save the catalog. Please try again.");
+                reportSaveError(err);
             }
         } finally {
             setSaving(false);
         }
-    }, [adminView, draftData, onCatalogSaved, refreshHistory, saving, serverRevision, setData]);
+    }, [applySaved, data, draftData, reportSaveError, saving, serverRevision]);
+
+    const resolveMerge = useCallback(async (choice) => {
+        const pending = mergeState;
+        setMergeState(null);
+        if (!pending || choice === "cancel") return;
+        setSaving(true);
+        try {
+            const saved = await saveState(choice === "mine" ? pending.mine : pending.theirs, pending.revision);
+            applySaved(saved, choice === "mine" ? "Saved with your version of the conflicting rows" : "Saved with their version of the conflicting rows");
+        } catch (err) {
+            reportSaveError(err);
+        } finally {
+            setSaving(false);
+        }
+    }, [applySaved, mergeState, reportSaveError]);
 
     const handleExit = useCallback(async () => {
         if (hasUnsavedChanges) {
@@ -1158,6 +1202,16 @@ export function AdminPage({ data, setData, serverRevision, onCatalogSaved, initi
                     <button type="button" style={styles.zoomCloseBtn} onClick={(e) => { e.stopPropagation(); setZoomedImage(null); }}>×</button>
                     <img src={zoomedImage} alt="Zoomed" style={styles.zoomImage} onClick={(e) => e.stopPropagation()} />
                 </div>
+            )}
+
+            {mergeState && (
+                <MergeConflictDialog
+                    conflicts={mergeState.conflicts}
+                    styles={styles}
+                    onKeepMine={() => resolveMerge("mine")}
+                    onKeepTheirs={() => resolveMerge("theirs")}
+                    onCancel={() => resolveMerge("cancel")}
+                />
             )}
 
             {confirmState && (
